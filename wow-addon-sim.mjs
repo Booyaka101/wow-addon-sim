@@ -489,8 +489,9 @@ for (const file of toc.files) {
         continue;
     }
     const code = fs.readFileSync(filePath, 'utf8');
-    // wrap in a pcall so errors land in SIM_ERRORS, not as fatal dostring failures
-    const wrapped = 'sim_pcall(function()\n' + code + '\nend)';
+    // wrap in a vararg function so `...` works at file scope (WoW addons get (name, nsTable))
+    // pcall catches errors without crashing the sim
+    const wrapped = `sim_pcall(function(...) ${code} end, ${JSON.stringify(toc.meta.Title || path.basename(addonDir))}, nil)`;
     status = lauxlib.luaL_dostring(L, fengari.to_luastring(wrapped));
     if (status !== lua.LUA_OK) {
         const err = lua.lua_tostring(L, -1);
