@@ -22,6 +22,6 @@ jobs:
           git clone https://github.com/Booyaka101/whyhidden ../whyhidden
           git clone https://github.com/Booyaka101/clearcombattext ../clearcombattext
       - name: sim on WhyHidden
-        run: node wow-addon-sim.mjs ../whyhidden
+        run: node wow-addon-sim.mjs ../whyhidden --strict
       - name: sim on ClearCombatText
-        run: node wow-addon-sim.mjs ../clearcombattext
+        run: node wow-addon-sim.mjs ../clearcombattext --strict
