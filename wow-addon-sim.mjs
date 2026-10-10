@@ -533,7 +533,73 @@ for (const ev of events) {
     }
 }
 
-// after firing events, run layout validation
+// after the addon loads and events fire, load the injector and perf modules
+const injectorPath = path.join(here, 'event-injector.lua');
+const perfPath = path.join(here, 'perf-instrument.lua');
+
+if (fs.existsSync(injectorPath)) {
+    const injectorCode = fs.readFileSync(injectorPath, 'utf8');
+    const iStatus = lauxlib.luaL_dostring(L, fengari.to_luastring(injectorCode));
+    if (iStatus !== lua.LUA_OK) {
+        console.error('  INJECTOR: failed to load (non-fatal)');
+    }
+}
+
+if (fs.existsSync(perfPath)) {
+    const perfCode = fs.readFileSync(perfPath, 'utf8');
+    const pStatus = lauxlib.luaL_dostring(L, fengari.to_luastring(perfCode));
+    if (pStatus !== lua.LUA_OK) {
+        console.error('  PERF: failed to load (non-fatal)');
+    }
+}
+
+// data-rich scenarios that exercise actual addon logic
+const DATA_SCENARIOS = {
+    combat_burst: () => {
+        // simulate a 23-event combat sequence with real data
+        lua.lua_getglobal(L, fengari.to_luastring('sim_inject_units'));
+        lua.lua_pcall(L, 0, 0, 0);
+        lua.lua_getglobal(L, fengari.to_luastring('sim_combat_sequence'));
+        lua.lua_pcall(L, 0, 0, 0);
+    },
+    arena_restricted: () => {
+        // enter an arena with restrictions active — WhyHidden's main case
+        lua.lua_getglobal(L, fengari.to_luastring('sim_enable_restrictions'));
+        lua.lua_pcall(L, 0, 0, 0);
+        lua.lua_getglobal(L, fengari.to_luastring('sim_enter_arena'));
+        lua.lua_pcall(L, 0, 0, 0);
+        lua.lua_getglobal(L, fengari.to_luastring('sim_inject_units'));
+        lua.lua_pcall(L, 0, 0, 0);
+        // fire a player login to re-check restrictions in the new context
+        lua.lua_getglobal(L, fengari.to_luastring('sim_player_login'));
+        lua.lua_pcall(L, 0, 0, 0);
+    },
+    raid_healing: () => {
+        // simulate healing in a raid with restrictions
+        lua.lua_getglobal(L, fengari.to_luastring('sim_enable_restrictions'));
+        lua.lua_pcall(L, 0, 0, 0);
+        lua.lua_getglobal(L, fengari.to_luastring('sim_enter_raid'));
+        lua.lua_pcall(L, 0, 0, 0);
+        lua.lua_getglobal(L, fengari.to_luastring('sim_inject_units'));
+        lua.lua_pcall(L, 0, 0, 0);
+        // fire a healing-focused event sequence
+        for (const mtype of ['ENTERING_COMBAT', 'HEAL', 'HEAL_CRIT', 'PERIODICHEAL', 'ABSORB', 'HEAL', 'HEAL_CRIT']) {
+            lua.lua_getglobal(L, fengari.to_luastring('sim_combat_event'));
+            lua.lua_pushstring(L, fengari.to_luastring(mtype));
+            lua.lua_pcall(L, 1, 0, 0);
+        }
+    },
+};
+
+// after the standard events, run any data scenarios
+for (const s of scenarios) {
+    if (DATA_SCENARIOS[s]) {
+        console.log(`  Running data scenario: ${s}`);
+        DATA_SCENARIOS[s]();
+    }
+}
+
+// after all events, run layout validation
 if (fs.existsSync(path.join(here, 'layout-validator.lua'))) {
     const validatorCode = fs.readFileSync(path.join(here, 'layout-validator.lua'), 'utf8');
     status = lauxlib.luaL_dostring(L, fengari.to_luastring(validatorCode));
@@ -560,6 +626,30 @@ if (fs.existsSync(path.join(here, 'layout-validator.lua'))) {
         const verr = lua.lua_tostring(L, -1);
         console.error(`  LAYOUT: validator failed to load: ${verr ? (() => { try { return fengari.to_jsstring(verr); } catch { return 'non-utf8'; } })() : 'unknown'}`);
     }
+}
+
+// performance report and budget check
+{
+    lua.lua_getglobal(L, fengari.to_luastring('sim_perf_report'));
+    const prStatus = lua.lua_pcall(L, 0, 1, 0);
+    if (prStatus === lua.LUA_OK) {
+        const report = safeJsString(L, -1);
+        console.log(`  Perf: ${report.replace(/\n/g, ' | ')}`);
+        lua.lua_pop(L, 1);
+    }
+    lua.lua_getglobal(L, fengari.to_luastring('sim_check_performance'));
+    const pcStatus = lua.lua_pcall(L, 0, 2, 0);
+    if (pcStatus === lua.LUA_OK) {
+        const issueCount = lua.lua_tonumber(L, -2);
+        if (issueCount > 0) {
+            // get the issues
+            lua.lua_getglobal(L, fengari.to_luastring('sim_perf_report'));
+            // just report the count; the issues are in the table
+            console.error(`  PERF: ${issueCount} budget concern(s) — run with --verbose for details`);
+            hadErrors = true;
+        }
+    }
+    lua.lua_pop(L, 2);
 }
 
 // collect errors
