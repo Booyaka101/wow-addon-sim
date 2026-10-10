@@ -17,6 +17,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm install
+      - name: checkout sibling addons
+        run: |
+          git clone https://github.com/Booyaka101/whyhidden ../whyhidden
+          git clone https://github.com/Booyaka101/clearcombattext ../clearcombattext
       - name: sim on WhyHidden
         run: node wow-addon-sim.mjs ../whyhidden
       - name: sim on ClearCombatText
