@@ -1,0 +1,10 @@
+## Interface: 16001, 120100, 120105
+## Title: MyAddon
+## Notes: One line describing what this does for the player.
+## Author: YourName
+## Version: 0.1.0
+## IconTexture: Interface/Icons/INV_Misc_QuestionMark
+## X-Category: Miscellaneous
+## SavedVariables: MyAddonDB
+
+MyAddon.lua
