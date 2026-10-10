@@ -26,10 +26,12 @@ if (!addonDir) {
 let surfacePath = null;
 let extraEvents = [];
 let scenarios = [];
+let strictMode = false;
 for (let i = 1; i < args.length; i++) {
     if (args[i] === '--surface') surfacePath = args[++i];
     if (args[i] === '--events') extraEvents = args[++i].split(',');
     if (args[i] === '--scenario') scenarios.push(args[++i]);
+    if (args[i] === '--strict') strictMode = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +468,21 @@ console.log(`  Files: ${toc.files.join(', ')}`);
 console.log(`  Surface: ${actualSurface ? path.basename(actualSurface) : 'none (minimal stubs only)'} (${knownGlobals.size} globals, ${knownNamespaces.size} namespaces)`);
 
 const stubCode = buildStubCode();
-const fullProgram = PREAMBLE + '\n' + stubCode + '\n';
+let fullProgram = PREAMBLE + '\n' + stubCode + '\n';
+
+// if --strict: append strict stubs that override permissive ones
+if (strictMode) {
+    const strictPath = path.join(here, 'strict-stubs.lua');
+    if (fs.existsSync(strictPath)) {
+        const strictCode = fs.readFileSync(strictPath, 'utf8');
+        fullProgram += '\n' + strictCode + '\n' + `
+-- swap in strict versions
+CreateFrame = StrictCreateFrame
+GameTooltip = StrictGameTooltip
+`;
+        console.log('  Mode: STRICT (validates script names, argument types, API contracts)');
+    }
+}
 
 const L = lua.lua_newstate();
 fengari.lualib.luaL_openlibs(L);
