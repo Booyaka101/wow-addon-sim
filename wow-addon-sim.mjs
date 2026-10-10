@@ -533,6 +533,35 @@ for (const ev of events) {
     }
 }
 
+// after firing events, run layout validation
+if (fs.existsSync(path.join(here, 'layout-validator.lua'))) {
+    const validatorCode = fs.readFileSync(path.join(here, 'layout-validator.lua'), 'utf8');
+    status = lauxlib.luaL_dostring(L, fengari.to_luastring(validatorCode));
+    if (status === lua.LUA_OK) {
+        lua.lua_getglobal(L, fengari.to_luastring('sim_validate_layout'));
+        const vStatus = lua.lua_pcall(L, 0, 2, 0);
+        if (vStatus === lua.LUA_OK) {
+            const errCount = lua.lua_tonumber(L, -2);
+            if (errCount > 0) {
+                lua.lua_getglobal(L, fengari.to_luastring('sim_layout_errors_json'));
+                lua.lua_pcall(L, 0, 1, 0);
+                const errsJson = lua.lua_tostring(L, -1);
+                const errs = JSON.parse(errsJson ? (() => { try { return fengari.to_jsstring(errsJson); } catch { return '[]'; } })() : '[]');
+                errs.forEach(e => console.error(`  LAYOUT: ${e}`));
+                hadErrors = true;
+            } else {
+                console.log('  Layout: valid (all structural checks passed)');
+            }
+        } else {
+            console.error(`  LAYOUT: validator itself errored: ${safeJsString(L, -1)}`);
+        }
+        lua.lua_pop(L, 2);
+    } else {
+        const verr = lua.lua_tostring(L, -1);
+        console.error(`  LAYOUT: validator failed to load: ${verr ? (() => { try { return fengari.to_jsstring(verr); } catch { return 'non-utf8'; } })() : 'unknown'}`);
+    }
+}
+
 // collect errors
 function safeJsString(L, index) {
     try {
