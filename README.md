@@ -1,50 +1,67 @@
-# wow-addon-sim
+# WoW Addon DevKit
 
-Run a WoW addon headlessly and catch Lua errors without the game client.
+Everything you need to build, test, and ship WoW addons for the Forever and
+Midnight clients — without opening the game.
 
-Point it at any addon folder. It reads the TOC, loads every Lua file under a
-real Lua VM (fengari) with a WoW API stub layer generated from actual client
-captures, fires the lifecycle events (ADDON_LOADED, PLAYER_LOGIN,
-PLAYER_ENTERING_WORLD), and reports every error. Syntax errors, nil references,
-missing API calls — found at the terminal, not mid-raid.
+## The Tools
 
-## Usage
+| Tool | What it does |
+|---|---|
+| **wow-secret-lint** | Static analysis: which calls go dark under the secret-value API |
+| **wow-addon-sim** | Runtime simulation: load any addon headlessly, fire events, catch errors |
+| **wow-addon-release** | One command from code to CurseForge: test → bump → zip → tag → release |
+
+## Quick Start
 
 ```bash
-node wow-addon-sim.mjs <addon-dir>
+# Test any addon
+node wow-addon-sim/wow-addon-sim.mjs path/to/YourAddon
+
+# Test with a combat scenario
+node wow-addon-sim/wow-addon-sim.mjs path/to/YourAddon --scenario combat
+
+# Release (dry run first, always)
+node wow-addon-sim/wow-addon-release.mjs path/to/YourAddon --dry
+node wow-addon-sim/wow-addon-release.mjs path/to/YourAddon --patch
 ```
 
-Optional flags:
-- `--surface <file.json>` — use a specific API surface (defaults to the bundled Forever capture)
-- `--events PLAYER_REGEN_ENABLED,UNIT_HEALTH,...` — fire additional events after the standard lifecycle
+## The Quality Stack
 
-## What it catches
-
-- **Syntax errors** — the Lua parser rejects malformed code before it loads
-- **Load-time errors** — nil globals, bad arguments during initialization
-- **Event-time errors** — errors that only surface when the game fires an event
-- **Missing API calls** — the stub layer is generated from a real client capture; calls to things not in the surface log visibly
-- **Stub coverage gaps** — if the addon calls a frame method the stub doesn't implement, that's also an error (and a to-do for the stub layer)
-
-## What it does NOT catch
-
-- Visual bugs (positions, colors, animations)
-- Logic errors that don't throw (wrong math, bad conditions)
-- Timing-dependent bugs (race conditions, event ordering)
-- Anything that depends on real game data (actual unit names, real spell IDs)
-
-## The surface data
-
-The default surface is a first-party capture of the WoW Forever beta client
-(build 70245, interface 16001): 5,997 global functions, 271 C_ namespaces.
-Every one of those gets a stub that logs when called and returns nil. Anything
-your addon calls that isn't in that surface is either a beta-version difference
-or a bug — both worth knowing about.
-
-Swap in a retail capture for retail-specific testing:
-```bash
-node wow-addon-sim.mjs MyAddon --surface retail-surface.json
 ```
+Layer 1: Syntax       → luaparse rejects malformed Lua
+Layer 2: Static       → wow-secret-lint: secret-value risks, removed APIs, flavour gates
+Layer 3: Unit         → fengari harnesses: assertions under a real Lua VM
+Layer 4: Simulation   → wow-addon-sim: full lifecycle + scenarios under real API stubs
+Layer 5: Integration  → CI cross-checks: sim runs against sibling repos
+Layer 6: Distribution → GitHub releases with provenance + CurseForge moderation
+```
+
+## Scenarios
+
+wow-addon-sim ships with named event sequences that simulate real gameplay:
+
+- `login` — the standard lifecycle (ADDON_LOADED → PLAYER_LOGIN → PLAYER_ENTERING_WORLD)
+- `combat` — enter combat, take damage, power changes
+- `arena` — zone change into an arena, combat starts
+- `target` — target and mouseover changes
+- `zone` — zone transitions
+- `group` — party formation and unit updates
+- `logout` — the full lifecycle then logout
+
+Chain them: `--scenario combat,arena,logout`
+
+## The Data Advantage
+
+The sim's stub layer is generated from a **first-party capture of the live
+Forever client** — 5,997 global functions, 271 C_ namespaces, captured from
+build 70245. When your addon calls something, the sim knows whether it actually
+exists on the client. Nobody else in the Forever scene has this.
+
+## Addons Built With This Stack
+
+- [WhyHidden](https://github.com/Booyaka101/whyhidden) — explains what the client is hiding
+- [ClearCombatText](https://github.com/Booyaka101/clearcombattext) — readable combat text under restrictions
+- [wow-secret-lint](https://github.com/Booyaka101/wow-secret-lint) — the linter that started it all
 
 ## License
 

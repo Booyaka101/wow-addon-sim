@@ -25,9 +25,11 @@ if (!addonDir) {
 
 let surfacePath = null;
 let extraEvents = [];
+let scenarios = [];
 for (let i = 1; i < args.length; i++) {
     if (args[i] === '--surface') surfacePath = args[++i];
     if (args[i] === '--events') extraEvents = args[++i].split(',');
+    if (args[i] === '--scenario') scenarios.push(args[++i]);
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +433,30 @@ function readToc(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// scenario system: named gameplay states that fire a realistic event sequence
+
+const SCENARIOS = {
+    login: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD'],
+    combat: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'PLAYER_REGEN_DISABLED',
+             'UNIT_COMBAT', 'COMBAT_TEXT_UPDATE', 'UNIT_HEALTH', 'UNIT_POWER_UPDATE'],
+    arena: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'ZONE_CHANGED_NEW_AREA',
+            'PLAYER_REGEN_DISABLED', 'COMBAT_TEXT_UPDATE', 'UNIT_HEALTH'],
+    target: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'PLAYER_TARGET_CHANGED',
+             'UPDATE_MOUSEOVER_UNIT', 'UNIT_AURA'],
+    zone: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'ZONE_CHANGED_NEW_AREA',
+           'ZONE_CHANGED', 'MINIMAP_ZONE_CHANGED', 'PLAYER_ENTERING_WORLD'],
+    group: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'GROUP_ROSTER_UPDATE',
+            'PARTY_MEMBERS_CHANGED', 'UNIT_HEALTH', 'UNIT_POWER_UPDATE'],
+    logout: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'PLAYER_LEAVING_WORLD', 'PLAYER_LOGOUT'],
+};
+
+function getScenarioEvents(name) {
+    if (SCENARIOS[name]) return SCENARIOS[name];
+    // treat as comma-separated event names
+    return name.split(',').map(e => e.trim());
+}
+
+// ---------------------------------------------------------------------------
 // run
 
 const toc = readToc(addonDir);
@@ -473,16 +499,37 @@ for (const file of toc.files) {
     }
 }
 
-// fire lifecycle events
-const events = ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', ...extraEvents];
+// fire lifecycle events (plus scenarios)
+let events;
+if (scenarios.length > 0) {
+    events = scenarios.flatMap(s => getScenarioEvents(s));
+    console.log(`  Scenarios: ${scenarios.join(', ')} (${events.length} events)`);
+} else {
+    events = ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', ...extraEvents];
+}
 for (const ev of events) {
-    lua.lua_getglobal(L, fengari.to_luastring(ev === 'ADDON_LOADED' ? 'sim_addon_loaded' : ev === 'PLAYER_LOGIN' ? 'sim_player_login' : 'sim_player_entering_world'));
+    lua.lua_getglobal(L, fengari.to_luastring(
+        ev === 'ADDON_LOADED' ? 'sim_addon_loaded'
+        : ev === 'PLAYER_LOGIN' ? 'sim_player_login'
+        : 'sim_player_entering_world'
+    ));
     if (ev === 'ADDON_LOADED') lua.lua_pushstring(L, fengari.to_luastring(toc.meta.Title || path.basename(addonDir)));
     const callStatus = lua.lua_pcall(L, ev === 'ADDON_LOADED' ? 1 : 0, 0, 0);
     if (callStatus !== lua.LUA_OK) {
-        const err = lua.lua_tostring(L, -1);
         console.error(`  EVENT ERROR (${ev}): ${safeJsString(L, -1) || 'unknown'}`);
         hadErrors = true;
+    } else {
+        // also fire through the generic event dispatcher for events we don't
+        // have dedicated helpers for (they go through sim_fire_event)
+        if (!['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD'].includes(ev)) {
+            lua.lua_getglobal(L, fengari.to_luastring('sim_fire_event'));
+            lua.lua_pushstring(L, fengari.to_luastring(ev));
+            const s2 = lua.lua_pcall(L, 1, 0, 0);
+            if (s2 !== lua.LUA_OK) {
+                console.error(`  DISPATCH ERROR (${ev}): ${safeJsString(L, -1) || 'unknown'}`);
+                hadErrors = true;
+            }
+        }
     }
 }
 
