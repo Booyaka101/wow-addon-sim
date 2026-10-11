@@ -1,4 +1,4 @@
--- strict-stubs.lua ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â API stubs that VALIDATE calls against real client behavior.
+-- strict-stubs.lua ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â API stubs that VALIDATE calls against real client behavior.
 --
 -- The sim's original stubs accepted everything (permissive). The live test proved
 -- this is the wrong default: GameTooltip:HookScript("OnTooltipSetUnit", ...) was
@@ -95,7 +95,7 @@ local function strict_create_frame(kind, name, parent, template)
     f.SetScript = function(self, script_name, fn)
         if not valid_scripts[script_name] then
             SIM_ERRORS[#SIM_ERRORS + 1] = string.format(
-                "STRICT: %s:SetScript(%q) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â %q is not a valid script for %s (has it been removed in this client?)",
+                "STRICT: %s:SetScript(%q) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â %q is not a valid script for %s (has it been removed in this client?)",
                 self._name, script_name or "?", script_name or "?", self._kind)
             return
         end
@@ -105,7 +105,7 @@ local function strict_create_frame(kind, name, parent, template)
     f.HookScript = function(self, script_name, fn)
         if not valid_scripts[script_name] then
             SIM_ERRORS[#SIM_ERRORS + 1] = string.format(
-                "STRICT: %s:HookScript(%q) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â %q is not a valid script for %s (has it been removed in this client?)",
+                "STRICT: %s:HookScript(%q) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â %q is not a valid script for %s (has it been removed in this client?)",
                 self._name, script_name or "?", script_name or "?", self._kind)
             return
         end
@@ -148,7 +148,7 @@ local function strict_create_frame(kind, name, parent, template)
 
     f.RegisterEvent = function(self, event)
         if not KNOWN_EVENTS[event] then
-            -- don't error on unknown events ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Blizzard adds new ones ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â but log it
+            -- don't error on unknown events ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Blizzard adds new ones ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â but log it
             SIM_LOG[#SIM_LOG + 1] = "[strict] unknown event registered: " .. tostring(event) .. " (may be new in this client)"
         end
         self._events[event] = true
@@ -165,7 +165,7 @@ local function strict_create_frame(kind, name, parent, template)
     f.IsVisible = function(self) return self._shown end
     f.SetSize = function(self, w, h)
         if type(w) ~= "number" or type(h) ~= "number" or w <= 0 or h <= 0 then
-            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetSize(" .. tostring(w) .. "," .. tostring(h) .. ") ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â must be positive numbers"
+            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetSize(" .. tostring(w) .. "," .. tostring(h) .. ") ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â must be positive numbers"
             return
         end
         self._size = {w = w, h = h}
@@ -175,6 +175,8 @@ local function strict_create_frame(kind, name, parent, template)
     f.GetWidth = function(self) return self._size.w end
     f.GetHeight = function(self) return self._size.h end
     f.SetPoint = function(self, ...) self._points[#self._points + 1] = {...} end
+    f.SetAllPoints = function(self) self._points[#self._points + 1] = { "ALL" } end
+    f.SetShown = function(self, v) if v then self._shown = true else self._shown = false end end
     f.ClearAllPoints = function(self) self._points = {} end
     f.GetPoint = function(self, i)
         local p = self._points[i or #self._points]
@@ -191,12 +193,12 @@ local function strict_create_frame(kind, name, parent, template)
     f.SetFrameLevel = function() end
     f.SetScale = function(self, s)
         if type(s) ~= "number" or s <= 0 then
-            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetScale(" .. tostring(s) .. ") ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â must be positive"
+            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetScale(" .. tostring(s) .. ") ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â must be positive"
         end
     end
     f.SetAlpha = function(self, a)
         if type(a) ~= "number" or a < 0 or a > 1 then
-            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetAlpha(" .. tostring(a) .. ") ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â must be in [0,1]"
+            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetAlpha(" .. tostring(a) .. ") ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â must be in [0,1]"
         end
         self._alpha = a
     end
@@ -235,7 +237,7 @@ local function strict_create_frame(kind, name, parent, template)
         local fs = { _text = "", _shown = false, _points = {} }
         fs.SetText = function(s, t)
             if type(t) ~= "string" and type(t) ~= "number" then
-                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetText(" .. type(t) .. ") ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â expected string or number"
+                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetText(" .. type(t) .. ") ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â expected string or number"
             end
             -- SimSecret is defined later in this file; resolved at call time.
             -- A marked value stores its display text: SetText is the display sink.
@@ -247,11 +249,12 @@ local function strict_create_frame(kind, name, parent, template)
         fs.SetFontObject = function() end
         fs.SetTextColor = function(s, r, g, b, a)
             if type(r) ~= "number" or r < 0 or r > 1 then
-                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetTextColor r=" .. tostring(r) .. " ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â must be in [0,1]"
+                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetTextColor r=" .. tostring(r) .. " ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â must be in [0,1]"
             end
         end
         fs.SetJustifyH = function() end
         fs.SetJustifyV = function() end
+        fs.SetShown = function(s, v) if v then s._shown = true else s._shown = false end end
         fs.SetPoint = function(...) fs._points[#fs._points + 1] = {...} end
         fs.ClearAllPoints = function() fs._points = {} end
         fs.GetPoint = function(s, i)
@@ -275,9 +278,13 @@ local function strict_create_frame(kind, name, parent, template)
         return fs
     end
     f.CreateAnimationGroup = function(self)
-        return { CreateAnimation = function()
-            return { SetDuration = function() end, SetTarget = function() end }
-        end }
+        return { Play = function() end, Stop = function() end, SetScript = function() end,
+            CreateAnimation = function()
+                return { SetDuration = function() end, SetTarget = function() end,
+                    SetOrder = function() end, SetFromAlpha = function() end,
+                    SetToAlpha = function() end, SetOffset = function() end,
+                    SetSmoothing = function() end }
+            end }
     end
 
     return f
@@ -419,7 +426,7 @@ local function track_fontstring(fs)
         fs.SetPoint = function(s, point, ...)
             if SimSecret.is(point) then
                 SIM_ERRORS[#SIM_ERRORS + 1] =
-                    "STRICT: SetPoint(point) received a secret value ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the live client rejects it with 'FontString SetPoint(): Usage:'. Recompute the position instead of reading back GetPoint from a widget that displayed secret text."
+                    "STRICT: SetPoint(point) received a secret value ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the live client rejects it with 'FontString SetPoint(): Usage:'. Recompute the position instead of reading back GetPoint from a widget that displayed secret text."
             end
             return rawSetPoint(s, point, ...)
         end
@@ -475,7 +482,7 @@ C_CombatText = {
 }
 
 -- secrets sweep: fire COMBAT_TEXT_UPDATE across known types, unknown types and
--- rounds, so every payload shape flows through the addon's handler ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â and the
+-- rounds, so every payload shape flows through the addon's handler ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â and the
 -- same payload repeats on the same type often enough to hit consolidation.
 function sim_run_secret_sweep()
     local mtypes = {
@@ -493,7 +500,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Auction House emulation (strict mode): forever-layout replicate data
 -- The live client's GetReplicateItemInfo returns [3]=count, [10]=buyout,
--- [17]=itemID, [18]=loaded ÃƒÂ¯Ã‚Â¿Ã‚Â½ positions Auctionator reads on this build.
+-- [17]=itemID, [18]=loaded ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ positions Auctionator reads on this build.
 C_AuctionHouse = C_AuctionHouse or {}
 local SIM_AH_ROWS = {}
 SimAH = { seed = {} }
@@ -619,15 +626,20 @@ function sim_run_browse_sweep()
         { itemKey = { itemID = 4338 }, minPrice = 40000,  totalQuantity = 50 },
         { itemKey = { itemID = 3827 }, minPrice = 200000, totalQuantity = 8  },
     }
+    local live = C_AuctionHouse.GetBrowseResults and C_AuctionHouse.GetBrowseResults() or nil
+    print("  [browse] seeded " .. #SimAH.browseRows .. " rows; GetBrowseResults returns "
+        .. (live and #live or "nil") .. " (same table: " .. tostring(live == SimAH.browseRows) .. ")")
     sim_fire_event("AUCTION_HOUSE_SHOW")
     for i = 1, 60 do sim_tick_onupdate(10) end -- ~10s: several sweeps, book arms
     -- someone lists 4338 at a fifth of market; a gray-quality item at a deal
     -- price; and a flooded market deal - only the first may alert
-    SimAH.browseRows[2].minPrice = 5000
+    SimAH.browseRows[2].minPrice = 5000 -- the deal drop (bisect suppressed once; restored)
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 828 }, minPrice = 5000, totalQuantity = 5 }    -- gray: gated
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 3827 }, minPrice = 20000, totalQuantity = 9000 } -- flooded: gated
+    SimAH.browseRows[#SimAH.browseRows + 1] =
+        { itemKey = { itemID = 5555 }, minPrice = 45000, totalQuantity = 30 }  -- under vendor: VENDOR deal
     for i = 1, 40 do sim_tick_onupdate(10) end -- next sweep must catch it
     -- click the alerted popup row: exercises searchListing -> SendSearchQuery
     -- (sorts validation) and the keyed result readers via printPending
@@ -645,14 +657,28 @@ function sim_run_browse_sweep()
         SlashCmdList["FOREVERSNIPER"]("feed")
     end
     sim_fire_event("AUCTION_HOUSE_CLOSED")
+    local internal = ForeverSniperDB and ForeverSniperDB.errors or {}
+    for _, e in ipairs(internal) do
+        SIM_ERRORS[#SIM_ERRORS + 1] = "addon err(" .. tostring(e.domain) .. "): " .. tostring(e.err)
+    end
+    local kinds = {}
+    for _, a in ipairs((ForeverSniperDB and ForeverSniperDB.alerts) or {}) do
+        kinds[#kinds + 1] = a.kind .. ":" .. tostring(a.id)
+    end
+    print("  [browse] alert kinds fired: " .. table.concat(kinds, ", "))
     local deals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.deals) or 0
-    if deals == 0 then
-        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the cheap listing was not detected - no deal fired"
-    elseif deals > 1 then
+    if deals < 2 then
+        SIM_ERRORS[#SIM_ERRORS + 1] =
+            "BROWSE SWEEP: expected the market deal AND the vendor flip (" .. deals .. " fired)"
+    elseif deals > 2 then
         SIM_ERRORS[#SIM_ERRORS + 1] =
             "BROWSE SWEEP: " .. deals .. " deals fired - the gray/flooded items must be gated out"
     end
-    print("  [browse] sweep done: " .. deals .. " deal(s) fired")
+    local vendorDeals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.vendorDeals) or 0
+    if vendorDeals ~= 1 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: vendor flip not detected (" .. vendorDeals .. ")"
+    end
+    print("  [browse] sweep done: " .. deals .. " deal(s) fired (" .. vendorDeals .. " vendor)")
 end
 
 -- search-contract enforcement: this client validates sorts entries by field
@@ -721,10 +747,12 @@ end
 -- "Sim<itemID>") and quality for the listability gate. SimItemQuality maps
 -- item ids to rarities; missing ids are uncommon (1).
 SimItemQuality = { [828] = 0 }
+SimItemVendor = { [5555] = 60000 }
 GetItemInfo = function(idOrLink)
     local id = type(idOrLink) == "number" and idOrLink or tonumber(tostring(idOrLink):match("item:(%d+)") or "")
     if id == nil then return nil end
-    return "Sim" .. id, nil, SimItemQuality[id] or 1, 40, nil, nil, nil, nil, nil, tostring(id)
+    return "Sim" .. id, nil, SimItemQuality[id] or 1, 40, nil, nil, nil, nil, nil, tostring(id),
+        SimItemVendor[id] or 0
 end
 
 -- Enum.AuctionHouseSortOrder: the live client exposes Name and Price keys
