@@ -686,6 +686,8 @@ function sim_run_browse_sweep()
         end
         for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("feed")
+        SlashCmdList["FOREVERSNIPER"]("cancel")
+        for i = 1, 10 do sim_tick_onupdate(10) end -- let the query + event land
         SlashCmdList["FOREVERSNIPER"]("why")
         SlashCmdList["FOREVERSNIPER"]("options")
         for i = 1, 3 do sim_tick_onupdate(10) end
@@ -968,4 +970,16 @@ GetInboxInvoiceInfo = function(i)
     local m = SimMailbox[i]
     if not m then return nil end
     return "seller", m.itemName, m.quantity, m.sale, m.deposit, m.cut
+end
+
+-- cancel emulation: the cancel cannon's action
+SimCancels = {}
+C_AuctionHouse.CancelAuction = function(auctionID)
+    if type(auctionID) ~= "number" then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: CancelAuction(auctionID) needs the numeric id"
+        return false
+    end
+    SimCancels[#SimCancels + 1] = auctionID
+    SIM_LOG[#SIM_LOG + 1] = "[canceled] auction " .. auctionID
+    return true
 end
