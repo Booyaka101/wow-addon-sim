@@ -638,6 +638,12 @@ function sim_run_browse_sweep()
         end
     end
     for i = 1, 10 do sim_tick_onupdate(10) end -- let the search results land
+    -- toggle the deal feed: rows must build, fill and hide without errors
+    if SlashCmdList and SlashCmdList["FOREVERSNIPER"] then
+        SlashCmdList["FOREVERSNIPER"]("feed")
+        for i = 1, 5 do sim_tick_onupdate(10) end
+        SlashCmdList["FOREVERSNIPER"]("feed")
+    end
     sim_fire_event("AUCTION_HOUSE_CLOSED")
     local deals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.deals) or 0
     if deals == 0 then
@@ -727,3 +733,11 @@ Enum = Enum or {}
 Enum.AuctionHouseSortOrder = Enum.AuctionHouseSortOrder or {
     Bid = 0, Buyout = 1, Price = 1, Name = 2, Quantity = 3, TimeLeft = 4,
 }
+
+-- C_Timer.NewTimer: one-shot timers (toast auto-hide)
+C_Timer.NewTimer = function(sec, fn)
+    local t = { sec = sec or 0, due = GetTime() + (sec or 0), fn = fn }
+    t.Cancel = function(self) self.cancelled = true end
+    sim_timers[#sim_timers + 1] = t
+    return t
+end

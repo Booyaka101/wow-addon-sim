@@ -187,7 +187,13 @@ CreateFrame = function(kind, name, parent, template)
         return fs
     end
     f.CreateAnimationGroup = function(self)
-        return { CreateAnimation = function() return { SetDuration = function() end, SetTarget = function() end } end }
+        return { Play = function() end, Stop = function() end, SetScript = function() end,
+            CreateAnimation = function()
+                return { SetDuration = function() end, SetTarget = function() end,
+                    SetOrder = function() end, SetFromAlpha = function() end,
+                    SetToAlpha = function() end, SetOffset = function() end,
+                    SetSmoothing = function() end }
+            end }
     end
     f.SetNormalTexture = function() end
     f.SetPushedTexture = function() end
