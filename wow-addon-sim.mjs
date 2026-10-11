@@ -473,7 +473,7 @@ const SCENARIOS = {
             'PARTY_MEMBERS_CHANGED', 'UNIT_HEALTH', 'UNIT_POWER_UPDATE'],
     logout: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'PLAYER_LEAVING_WORLD', 'PLAYER_LOGOUT'],
     secrets: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'COMBAT_TEXT_UPDATE'],
-    ah: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'AH_SCAN'],
+    ah: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'AH_SCAN', 'BROWSE_SWEEP'],
 };
 
 function getScenarioEvents(name) {
@@ -555,6 +555,15 @@ for (const ev of events) {
         const as = lua.lua_pcall(L, 0, 0, 0);
         if (as !== lua.LUA_OK) {
             console.error(`  DISPATCH ERROR (ah scan): ${safeJsString(L, -1) || 'unknown'}`);
+            hadErrors = true;
+        }
+        continue;
+    }
+    if (scenarios.includes('ah') && ev === 'BROWSE_SWEEP') {
+        lua.lua_getglobal(L, fengari.to_luastring('sim_run_browse_sweep'));
+        const bs = lua.lua_pcall(L, 0, 0, 0);
+        if (bs !== lua.LUA_OK) {
+            console.error(`  DISPATCH ERROR (browse sweep): ${safeJsString(L, -1) || 'unknown'}`);
             hadErrors = true;
         }
         continue;
