@@ -666,6 +666,8 @@ function sim_run_browse_sweep()
         end
     end
     for i = 1, 10 do sim_tick_onupdate(10) end -- let the search results land
+-- a flip sold: the mail arrives, the mint must count it as REALIZED
+    SimMailbox[1] = { itemName = "Sim4338", quantity = 50, sale = 260000000, deposit = 500000, cut = 13000000 }
 -- toggle the deal feed: rows must build, fill and hide without errors;
     -- with a seeded bag, the SELL button must post at the learned market
     SimBags[0][1] = { id = 4338, count = 50 }
@@ -728,6 +730,13 @@ function sim_run_browse_sweep()
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: vendor flip count wrong (" .. vendorDeals .. ", expected 2: stackable + non-stackable)"
     end
     print("  [browse] sweep done: " .. deals .. " deal(s) fired (" .. vendorDeals .. " vendor)")
+
+    -- the mailbox mint: the sold-auction mail must be counted as REALIZED.
+    -- Runs last: the CLOSED event above triggers the scan synchronously.
+    local sales = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.sales) or 0
+    if sales == 0 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the mailbox mint missed the sold-auction mail"
+    end
 end
 
 -- search-contract enforcement: this client validates sorts entries by field
@@ -950,4 +959,13 @@ end
 C_AuctionHouse.GetNumOwnedAuctions = function() return #SimOwnedAuctions end
 C_AuctionHouse.GetOwnedAuctionInfo = function(i)
     return SimOwnedAuctions[i]
+end
+
+-- auction-sale mail emulation: the mailbox mint's data source
+SimMailbox = {}
+GetInboxNumItems = function() return #SimMailbox end
+GetInboxInvoiceInfo = function(i)
+    local m = SimMailbox[i]
+    if not m then return nil end
+    return "seller", m.itemName, m.quantity, m.sale, m.deposit, m.cut
 end
