@@ -672,6 +672,7 @@ function sim_run_browse_sweep()
     SimBags[0][2] = { id = 5555, count = 30 }
     SimBags[0][3] = { id = 7777, count = 10 }
     SimBags[0][4] = { id = 9999, count = 4 }
+    SimBags[0][5] = { id = 3827, count = 900 }
     if SlashCmdList and SlashCmdList["FOREVERSNIPER"] then
         SlashCmdList["FOREVERSNIPER"]("feed")
         for i = 1, 5 do sim_tick_onupdate(10) end
