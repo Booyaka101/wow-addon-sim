@@ -1,4 +1,4 @@
--- strict-stubs.lua — API stubs that VALIDATE calls against real client behavior.
+-- strict-stubs.lua â€” API stubs that VALIDATE calls against real client behavior.
 --
 -- The sim's original stubs accepted everything (permissive). The live test proved
 -- this is the wrong default: GameTooltip:HookScript("OnTooltipSetUnit", ...) was
@@ -81,13 +81,21 @@ local function strict_create_frame(kind, name, parent, template)
     }
     SIM_FRAMES[#SIM_FRAMES + 1] = f -- so the OnUpdate ticker reaches strict frames
 
+    -- template members live frames carry (BasicFrame-style title font string,
+    -- UIPanelButton-style text)
+    f.TitleText = { SetText = function() end, SetTextColor = function() end }
+    f.SetText = function(self, t) self._buttontext = t end
+    f.GetText = function(self) return self._buttontext end
+    f.Enable = function() end
+    f.Disable = function() end
+
     local valid_scripts = get_valid_scripts(f._kind)
 
     -- validate and store: SetScript / HookScript REJECT unknown script names
     f.SetScript = function(self, script_name, fn)
         if not valid_scripts[script_name] then
             SIM_ERRORS[#SIM_ERRORS + 1] = string.format(
-                "STRICT: %s:SetScript(%q) — %q is not a valid script for %s (has it been removed in this client?)",
+                "STRICT: %s:SetScript(%q) â€” %q is not a valid script for %s (has it been removed in this client?)",
                 self._name, script_name or "?", script_name or "?", self._kind)
             return
         end
@@ -97,7 +105,7 @@ local function strict_create_frame(kind, name, parent, template)
     f.HookScript = function(self, script_name, fn)
         if not valid_scripts[script_name] then
             SIM_ERRORS[#SIM_ERRORS + 1] = string.format(
-                "STRICT: %s:HookScript(%q) — %q is not a valid script for %s (has it been removed in this client?)",
+                "STRICT: %s:HookScript(%q) â€” %q is not a valid script for %s (has it been removed in this client?)",
                 self._name, script_name or "?", script_name or "?", self._kind)
             return
         end
@@ -133,11 +141,13 @@ local function strict_create_frame(kind, name, parent, template)
         INSPECT_READY = true, UNIT_INVENTORY_CHANGED = true,
         ITEM_SEARCH_RESULTS_UPDATED = true, COMMODITY_SEARCH_RESULTS_UPDATED = true,
         AUCTION_HOUSE_SHOW = true, AUCTION_HOUSE_CLOSED = true,
+        REPLICATE_ITEM_LIST_UPDATE = true, REPLICATE_ITEM_LIST_UPDATED = true,
+        COMMODITY_PRICE_UPDATED = true,
     }
 
     f.RegisterEvent = function(self, event)
         if not KNOWN_EVENTS[event] then
-            -- don't error on unknown events — Blizzard adds new ones — but log it
+            -- don't error on unknown events â€” Blizzard adds new ones â€” but log it
             SIM_LOG[#SIM_LOG + 1] = "[strict] unknown event registered: " .. tostring(event) .. " (may be new in this client)"
         end
         self._events[event] = true
@@ -154,7 +164,7 @@ local function strict_create_frame(kind, name, parent, template)
     f.IsVisible = function(self) return self._shown end
     f.SetSize = function(self, w, h)
         if type(w) ~= "number" or type(h) ~= "number" or w <= 0 or h <= 0 then
-            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetSize(" .. tostring(w) .. "," .. tostring(h) .. ") — must be positive numbers"
+            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetSize(" .. tostring(w) .. "," .. tostring(h) .. ") â€” must be positive numbers"
             return
         end
         self._size = {w = w, h = h}
@@ -180,12 +190,12 @@ local function strict_create_frame(kind, name, parent, template)
     f.SetFrameLevel = function() end
     f.SetScale = function(self, s)
         if type(s) ~= "number" or s <= 0 then
-            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetScale(" .. tostring(s) .. ") — must be positive"
+            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetScale(" .. tostring(s) .. ") â€” must be positive"
         end
     end
     f.SetAlpha = function(self, a)
         if type(a) ~= "number" or a < 0 or a > 1 then
-            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetAlpha(" .. tostring(a) .. ") — must be in [0,1]"
+            SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetAlpha(" .. tostring(a) .. ") â€” must be in [0,1]"
         end
         self._alpha = a
     end
@@ -224,7 +234,7 @@ local function strict_create_frame(kind, name, parent, template)
         local fs = { _text = "", _shown = false, _points = {} }
         fs.SetText = function(s, t)
             if type(t) ~= "string" and type(t) ~= "number" then
-                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetText(" .. type(t) .. ") — expected string or number"
+                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetText(" .. type(t) .. ") â€” expected string or number"
             end
             -- SimSecret is defined later in this file; resolved at call time.
             -- A marked value stores its display text: SetText is the display sink.
@@ -236,7 +246,7 @@ local function strict_create_frame(kind, name, parent, template)
         fs.SetFontObject = function() end
         fs.SetTextColor = function(s, r, g, b, a)
             if type(r) ~= "number" or r < 0 or r > 1 then
-                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetTextColor r=" .. tostring(r) .. " — must be in [0,1]"
+                SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetTextColor r=" .. tostring(r) .. " â€” must be in [0,1]"
             end
         end
         fs.SetJustifyH = function() end
@@ -403,7 +413,7 @@ local function track_fontstring(fs)
         fs.SetPoint = function(s, point, ...)
             if SimSecret.is(point) then
                 SIM_ERRORS[#SIM_ERRORS + 1] =
-                    "STRICT: SetPoint(point) received a secret value — the live client rejects it with 'FontString SetPoint(): Usage:'. Recompute the position instead of reading back GetPoint from a widget that displayed secret text."
+                    "STRICT: SetPoint(point) received a secret value â€” the live client rejects it with 'FontString SetPoint(): Usage:'. Recompute the position instead of reading back GetPoint from a widget that displayed secret text."
             end
             return rawSetPoint(s, point, ...)
         end
@@ -459,7 +469,7 @@ C_CombatText = {
 }
 
 -- secrets sweep: fire COMBAT_TEXT_UPDATE across known types, unknown types and
--- rounds, so every payload shape flows through the addon's handler — and the
+-- rounds, so every payload shape flows through the addon's handler â€” and the
 -- same payload repeats on the same type often enough to hit consolidation.
 function sim_run_secret_sweep()
     local mtypes = {
@@ -472,4 +482,92 @@ function sim_run_secret_sweep()
         end
     end
     print("  [secrets] sweep done: " .. SIM_SECRET_RENDERS .. " marked value(s) rendered through SetText")
+end
+
+-- ---------------------------------------------------------------------------
+-- Auction House emulation (strict mode): forever-layout replicate data
+-- The live client's GetReplicateItemInfo returns [3]=count, [10]=buyout,
+-- [17]=itemID, [18]=loaded ï¿½ positions Auctionator reads on this build.
+C_AuctionHouse = C_AuctionHouse or {}
+local SIM_AH_ROWS = {}
+SimAH = { seed = {} }
+
+function SimAH.populate(rows) SIM_AH_ROWS = rows end
+
+C_AuctionHouse.ReplicateItems = function()
+    SIM_AH_ROWS = {}
+    for i, r in ipairs(SimAH.seed) do
+        SIM_AH_ROWS[i] = { itemID = r.itemID, count = r.count, buyout = r.buyout }
+    end
+    -- the client delivers the list asynchronously, then fires the event
+    C_Timer.After(0.2, function() sim_fire_event("REPLICATE_ITEM_LIST_UPDATE") end)
+    return true
+end
+C_AuctionHouse.GetNumReplicateItems = function() return #SIM_AH_ROWS end
+C_AuctionHouse.GetReplicateItemInfo = function(i)
+    local r = SIM_AH_ROWS[i]
+    if not r then return nil end
+    return nil, nil, r.count, nil, nil, nil, nil, nil, nil, r.buyout,
+           nil, nil, nil, nil, nil, nil, r.itemID, true
+end
+C_AuctionHouse.GetReplicateItemLink = function(i)
+    local r = SIM_AH_ROWS[i]
+    if not r then return nil end
+    return ("|cffffffff|Hitem:%d::::::::120::::|h[Sim Item %d]|h|r"):format(r.itemID, r.itemID)
+end
+C_AuctionHouse.IsThrottledMessageSystemReady = function() return true end
+
+-- C_Timer.After must actually run: addons prefer it over manual OnUpdate timers,
+-- and a no-op stub silently kills every scheduled callback (found by the ah scan)
+C_Timer = C_Timer or {}
+local sim_timers = {}
+C_Timer.After = function(sec, fn)
+    sim_timers[#sim_timers + 1] = { due = GetTime() + (sec or 0), fn = fn }
+end
+C_Timer.NewTicker = function(sec, fn)
+    local t = { due = GetTime() + (sec or 0), fn = fn, repeating = true }
+    sim_timers[#sim_timers + 1] = t
+    return t
+end
+local raw_sim_tick = sim_tick_onupdate
+sim_tick_onupdate = function(n)
+    for i = 1, n do
+        raw_sim_tick(1)
+        for j = #sim_timers, 1, -1 do
+            local t = sim_timers[j]
+            if GetTime() >= t.due then
+                table.remove(sim_timers, j)
+                if t.repeating then t.due = GetTime() + (t.sec or t.due - GetTime()) ; sim_timers[#sim_timers + 1] = t end
+                sim_pcall(t.fn)
+            end
+        end
+    end
+end
+
+function sim_run_ah_scan()
+    -- seed a small market: 6 listings across 3 items, sane prices
+    SimAH.seed = {
+        { itemID = 1529, count = 1, buyout = 500000 },   -- Greater Magic Essence-ish
+        { itemID = 1529, count = 5, buyout = 2600000 },
+        { itemID = 4338, count = 20, buyout = 800000 },  -- Jungle Remedy cloth-ish
+        { itemID = 4338, count = 1, buyout = 39000 },    -- the cheap outlier
+        { itemID = 3827, count = 1, buyout = 150000 },   -- ration
+        { itemID = 3827, count = 10, buyout = 2000000 },
+    }
+    sim_fire_event("AUCTION_HOUSE_SHOW")
+    for i = 1, 80 do sim_tick_onupdate(10) end -- drive timers + the scan
+    sim_fire_event("AUCTION_HOUSE_CLOSED")
+    local learned = 0
+    if ForeverSniperDB and ForeverSniperDB.book then
+        for _ in pairs(ForeverSniperDB.book) do learned = learned + 1 end
+    end
+    if learned == 0 then
+        SIM_ERRORS[#SIM_ERRORS + 1] =
+            "AH SCAN: the price book did not fill ï¿½ item learning is broken"
+    end
+    local internal = ForeverSniperDB and ForeverSniperDB.errors or {}
+    for _, e in ipairs(internal) do
+        SIM_ERRORS[#SIM_ERRORS + 1] = "addon err(" .. tostring(e.domain) .. "): " .. tostring(e.err)
+    end
+    print("  [ah] scan complete: " .. learned .. " item(s) learned, " .. #internal .. " internal error(s)")
 end

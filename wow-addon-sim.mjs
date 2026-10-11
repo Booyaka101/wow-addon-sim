@@ -473,6 +473,7 @@ const SCENARIOS = {
             'PARTY_MEMBERS_CHANGED', 'UNIT_HEALTH', 'UNIT_POWER_UPDATE'],
     logout: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'PLAYER_LEAVING_WORLD', 'PLAYER_LOGOUT'],
     secrets: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'COMBAT_TEXT_UPDATE'],
+    ah: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'AH_SCAN'],
 };
 
 function getScenarioEvents(name) {
@@ -548,6 +549,16 @@ if (scenarios.length > 0) {
     events = ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', ...extraEvents];
 }
 for (const ev of events) {
+    // the AH scan replaces the pseudo-event with a full open->scan->learn pass
+    if (scenarios.includes('ah') && ev === 'AH_SCAN') {
+        lua.lua_getglobal(L, fengari.to_luastring('sim_run_ah_scan'));
+        const as = lua.lua_pcall(L, 0, 0, 0);
+        if (as !== lua.LUA_OK) {
+            console.error(`  DISPATCH ERROR (ah scan): ${safeJsString(L, -1) || 'unknown'}`);
+            hadErrors = true;
+        }
+        continue;
+    }
     // the secrets sweep replaces the bare event with a full marked-payload pass
     if (scenarios.includes('secrets') && ev === 'COMBAT_TEXT_UPDATE') {
         lua.lua_getglobal(L, fengari.to_luastring('sim_run_secret_sweep'));
