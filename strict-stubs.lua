@@ -626,6 +626,7 @@ function sim_run_browse_sweep()
         { itemKey = { itemID = 1529 }, minPrice = 500000, totalQuantity = 12 },
         { itemKey = { itemID = 4338 }, minPrice = 40000,  totalQuantity = 50 },
         { itemKey = { itemID = 3827 }, minPrice = 200000, totalQuantity = 8  },
+        { itemKey = { itemID = 7777 }, minPrice = 40000,  totalQuantity = 10 }, -- uncached item
     }
     local live = C_AuctionHouse.GetBrowseResults and C_AuctionHouse.GetBrowseResults() or nil
     print("  [browse] seeded " .. #SimAH.browseRows .. " rows; GetBrowseResults returns "
@@ -635,12 +636,15 @@ function sim_run_browse_sweep()
     -- someone lists 4338 at a fifth of market; a gray-quality item at a deal
     -- price; and a flooded market deal - only the first may alert
     SimAH.browseRows[2].minPrice = 5000 -- the deal drop (bisect suppressed once; restored)
+    SimAH.browseRows[4].minPrice = 5000 -- the uncached item drops too: defers, then fires
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 828 }, minPrice = 5000, totalQuantity = 5 }    -- gray: gated
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 3827 }, minPrice = 20000, totalQuantity = 9000 } -- flooded: gated
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 5555 }, minPrice = 45000, totalQuantity = 30 }  -- under vendor: VENDOR deal
+    SimAH.browseRows[#SimAH.browseRows + 1] =
+        { itemKey = { itemID = 7777 }, minPrice = 5000, totalQuantity = 10 }  -- deal, uncached first (deferred)
     for i = 1, 40 do sim_tick_onupdate(10) end -- next sweep must catch it
     -- click the alerted popup row: exercises searchListing -> SendSearchQuery
     -- (sorts validation) and the keyed result readers via printPending
@@ -840,3 +844,17 @@ C_AuctionHouse.PostCommodity = function(loc, duration, quantity, unitPrice)
     return true
 end
 C_AuctionHouse.GetItemCommodityStatus = function(id) return false end
+
+-- uncached item info: these return nil from GetItemInfo until loaded;
+-- RequestLoadItemDataByID moves them into the known set (async cache model)
+SimUncached = { [7777] = true }
+local rawGetItemInfo = GetItemInfo
+GetItemInfo = function(idOrLink)
+  local id = type(idOrLink) == "number" and idOrLink or tonumber(tostring(idOrLink):match("item:(%d+)") or "")
+  if id and SimUncached[id] then return nil end
+  return rawGetItemInfo(idOrLink)
+end
+C_Item = C_Item or {}
+C_Item.RequestLoadItemDataByID = function(id)
+  if id and SimUncached[id] then SimUncached[id] = nil end
+end
