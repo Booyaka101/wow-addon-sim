@@ -655,6 +655,9 @@ function sim_run_browse_sweep()
         SlashCmdList["FOREVERSNIPER"]("feed")
         for i = 1, 5 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("feed")
+        SlashCmdList["FOREVERSNIPER"]("options")
+        for i = 1, 3 do sim_tick_onupdate(10) end
+        SlashCmdList["FOREVERSNIPER"]("options")
     end
     sim_fire_event("AUCTION_HOUSE_CLOSED")
     local internal = ForeverSniperDB and ForeverSniperDB.errors or {}
