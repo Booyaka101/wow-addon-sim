@@ -235,7 +235,8 @@ local function safe_stub(name)
 end
 
 -- some APIs need specific return shapes
-GetTime = function() return 1000.0 end
+local sim_clock = 1000.0
+GetTime = function() return sim_clock end
 GetFramerate = function() return 60 end
 date = os.date
 time = os.time
@@ -347,6 +348,22 @@ LOW_HEALTH = "Low health!"
 LOW_MANA = "Low mana!"
 ENTERING_COMBAT = "Entering combat"
 LEAVING_COMBAT = "Leaving combat"
+
+-- OnUpdate ticker: the live client runs these every frame; the sim advances the
+-- clock and fires every registered handler so fade/rise loops get exercised
+function sim_tick_onupdate(n)
+    for i = 1, n do
+        sim_clock = sim_clock + 1 / 60
+        local elapsed = 1 / 60
+        for _, f in ipairs(SIM_FRAMES) do
+            local fn = f._scripts and f._scripts["OnUpdate"]
+            if fn then sim_pcall(fn, f, elapsed) end
+            if f._hooks and f._hooks["OnUpdate"] then
+                for _, h in ipairs(f._hooks["OnUpdate"]) do sim_pcall(h, f, elapsed) end
+            end
+        end
+    end
+end
 
 -- event dispatch helper (JS calls into this)
 function sim_fire_event(event, ...)
@@ -564,6 +581,15 @@ for (const ev of events) {
             }
         }
     }
+}
+
+// tick OnUpdate handlers after the events: fade/rise loops must survive too
+lua.lua_getglobal(L, fengari.to_luastring('sim_tick_onupdate'));
+lua.lua_pushnumber(L, 120); // two seconds of frames
+const tickStatus = lua.lua_pcall(L, 1, 0, 0);
+if (tickStatus !== lua.LUA_OK) {
+    console.error(`  TICK ERROR (onupdate): ${safeJsString(L, -1) || 'unknown'}`);
+    hadErrors = true;
 }
 
 // after the addon loads and events fire, load the injector and perf modules

@@ -79,6 +79,7 @@ local function strict_create_frame(kind, name, parent, template)
         _scripts = {}, _hooks = {}, _points = {}, _size = {w = 100, h = 100},
         _shown = false, _events = {}, _fonts = {}, _textures = {}, _children = {},
     }
+    SIM_FRAMES[#SIM_FRAMES + 1] = f -- so the OnUpdate ticker reaches strict frames
 
     local valid_scripts = get_valid_scripts(f._kind)
 
@@ -364,14 +365,48 @@ function SimSecret.display(v)
     return nil
 end
 SIM_SECRET_RENDERS = 0
+-- a widget that displayed secret text carries the marker, and its getters hand
+-- marked values back (live-proven: GetPoint returned <secret string> after
+-- SetText(secret), and passing that into SetPoint raised a usage error)
 local function track_fontstring(fs)
     local raw = fs.SetText
+    local rawGetPoint = fs.GetPoint
+    local rawGetText = fs.GetText
+    local rawSetPoint = fs.SetPoint
+    local tainted = false
     fs.SetText = function(s, text)
         if SimSecret.is(text) then
             SIM_SECRET_RENDERS = SIM_SECRET_RENDERS + 1
+            tainted = true
             return raw(s, text.__display)
         end
         return raw(s, text)
+    end
+    if rawGetPoint then
+        fs.GetPoint = function(s, i)
+            local point, rel, relPoint, x, y = rawGetPoint(s, i)
+            if tainted then
+                return SimSecret.mark(point or "CENTER"), rel,
+                    SimSecret.mark(relPoint or "CENTER"), SimSecret.mark(x or 0), SimSecret.mark(y or 0)
+            end
+            return point, rel, relPoint, x, y
+        end
+    end
+    if rawGetText then
+        fs.GetText = function(s)
+            local t = rawGetText(s)
+            if tainted then return SimSecret.mark(t or "") end
+            return t
+        end
+    end
+    if rawSetPoint then
+        fs.SetPoint = function(s, point, ...)
+            if SimSecret.is(point) then
+                SIM_ERRORS[#SIM_ERRORS + 1] =
+                    "STRICT: SetPoint(point) received a secret value — the live client rejects it with 'FontString SetPoint(): Usage:'. Recompute the position instead of reading back GetPoint from a widget that displayed secret text."
+            end
+            return rawSetPoint(s, point, ...)
+        end
     end
 end
 local strict_cf_inner = StrictCreateFrame
