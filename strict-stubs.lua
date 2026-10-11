@@ -80,6 +80,7 @@ local function strict_create_frame(kind, name, parent, template)
         _shown = false, _events = {}, _fonts = {}, _textures = {}, _children = {},
     }
     SIM_FRAMES[#SIM_FRAMES + 1] = f -- so the OnUpdate ticker reaches strict frames
+    f._parent = parent -- children must resolve GetParent from construction
 
     -- template members live frames carry (BasicFrame-style title font string,
     -- UIPanelButton-style text)
@@ -650,14 +651,26 @@ function sim_run_browse_sweep()
         end
     end
     for i = 1, 10 do sim_tick_onupdate(10) end -- let the search results land
-    -- toggle the deal feed: rows must build, fill and hide without errors
+    -- toggle the deal feed: rows must build, fill and hide without errors;
+    -- with a seeded bag, the SELL button must post at the learned market
+    SimBags[0][1] = { id = 4338, count = 50 }
     if SlashCmdList and SlashCmdList["FOREVERSNIPER"] then
         SlashCmdList["FOREVERSNIPER"]("feed")
         for i = 1, 5 do sim_tick_onupdate(10) end
+        for _, fr in ipairs(SIM_FRAMES) do
+            if fr.fs and fr.fs._text == "SELL" and fr._scripts and fr._scripts.OnClick then
+                sim_pcall(fr._scripts.OnClick, fr)
+                break
+            end
+        end
+        for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("feed")
         SlashCmdList["FOREVERSNIPER"]("options")
         for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("options")
+    end
+    if #SimPosted == 0 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the SELL button did not post the flip"
     end
     sim_fire_event("AUCTION_HOUSE_CLOSED")
     local internal = ForeverSniperDB and ForeverSniperDB.errors or {}
@@ -775,3 +788,55 @@ C_Timer.NewTimer = function(sec, fn)
     sim_timers[#sim_timers + 1] = t
     return t
 end
+
+-- bag + posting emulation: the relist assistant path
+SimBags = { [0] = {} } -- bag -> slot -> { id, count }
+C_Container = C_Container or {}
+C_Container.GetContainerNumSlots = function(bag)
+    return SimBags[bag] and #SimBags[bag] or 0
+end
+C_Container.GetContainerItemID = function(bag, slot)
+    local it = SimBags[bag] and SimBags[bag][slot]
+    return it and it.id or nil
+end
+C_Container.GetContainerItemInfo = function(bag, slot)
+    local it = SimBags[bag] and SimBags[bag][slot]
+    if not it then return nil end
+    return { itemID = it.id, stackCount = it.count }
+end
+ItemLocation = ItemLocation or {}
+ItemLocation.CreateFromBagAndSlot = function(bag, slot)
+    if SimBags[bag] and SimBags[bag][slot] then
+        return { bag = bag, slot = slot }
+    end
+    return nil
+end
+C_AuctionHouse.IsSellItemValid = function(loc) return loc ~= nil end
+C_AuctionHouse.GetAvailablePostCount = function(loc)
+    if loc == nil then return 0 end
+    local it = SimBags[loc.bag] and SimBags[loc.bag][loc.slot]
+    return it and it.count or 0
+end
+SimPosted = {}
+C_AuctionHouse.PostItem = function(loc, duration, quantity, buyout)
+    if loc == nil or type(duration) ~= "number" or type(quantity) ~= "number" or type(buyout) ~= "number"
+        or quantity <= 0 or buyout <= 0 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: PostItem bad args (loc/duration/quantity/buyout)"
+        return false
+    end
+    local it = SimBags[loc.bag] and SimBags[loc.bag][loc.slot]
+    SimPosted[#SimPosted + 1] = { id = it and it.id, quantity = quantity, buyout = buyout, duration = duration }
+    SIM_LOG[#SIM_LOG + 1] = "[posted] item " .. tostring(it and it.id) .. " x" .. quantity .. " for " .. buyout
+    return true
+end
+C_AuctionHouse.PostCommodity = function(loc, duration, quantity, unitPrice)
+    if loc == nil or type(quantity) ~= "number" or type(unitPrice) ~= "number" or unitPrice <= 0 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: PostCommodity bad args"
+        return false
+    end
+    local it = SimBags[loc.bag] and SimBags[loc.bag][loc.slot]
+    SimPosted[#SimPosted + 1] = { id = it and it.id, quantity = quantity, unit = unitPrice, duration = duration }
+    SIM_LOG[#SIM_LOG + 1] = "[posted] commodity " .. tostring(it and it.id) .. " x" .. quantity .. " at " .. unitPrice
+    return true
+end
+C_AuctionHouse.GetItemCommodityStatus = function(id) return false end
