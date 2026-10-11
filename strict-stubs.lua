@@ -621,8 +621,13 @@ function sim_run_browse_sweep()
     }
     sim_fire_event("AUCTION_HOUSE_SHOW")
     for i = 1, 60 do sim_tick_onupdate(10) end -- ~10s: several sweeps, book arms
-    -- someone lists 4338 at a fifth of market
+    -- someone lists 4338 at a fifth of market; a gray-quality item at a deal
+    -- price; and a flooded market deal - only the first may alert
     SimAH.browseRows[2].minPrice = 5000
+    SimAH.browseRows[#SimAH.browseRows + 1] =
+        { itemKey = { itemID = 828 }, minPrice = 5000, totalQuantity = 5 }    -- gray: gated
+    SimAH.browseRows[#SimAH.browseRows + 1] =
+        { itemKey = { itemID = 3827 }, minPrice = 20000, totalQuantity = 9000 } -- flooded: gated
     for i = 1, 40 do sim_tick_onupdate(10) end -- next sweep must catch it
     -- click the alerted popup row: exercises searchListing -> SendSearchQuery
     -- (sorts validation) and the keyed result readers via printPending
@@ -637,6 +642,9 @@ function sim_run_browse_sweep()
     local deals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.deals) or 0
     if deals == 0 then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the cheap listing was not detected - no deal fired"
+    elseif deals > 1 then
+        SIM_ERRORS[#SIM_ERRORS + 1] =
+            "BROWSE SWEEP: " .. deals .. " deals fired - the gray/flooded items must be gated out"
     end
     print("  [browse] sweep done: " .. deals .. " deal(s) fired")
 end
@@ -704,11 +712,13 @@ C_AuctionHouse.GetCommoditySearchResultInfo = function(itemID, i)
 end
 
 -- GetItemInfo: name resolution for watch-by-name rules (sim items are named
--- "Sim <itemID>" so scenarios can watch them by name)
+-- "Sim<itemID>") and quality for the listability gate. SimItemQuality maps
+-- item ids to rarities; missing ids are uncommon (1).
+SimItemQuality = { [828] = 0 }
 GetItemInfo = function(idOrLink)
-    local id = type(idOrLink) == "number" and idOrLink or tonumber(tostring(idOrLink):match("item:(%d+)") or "") 
+    local id = type(idOrLink) == "number" and idOrLink or tonumber(tostring(idOrLink):match("item:(%d+)") or "")
     if id == nil then return nil end
-    return "Sim" .. id, nil, 1, 40, nil, nil, nil, nil, nil, tostring(id)
+    return "Sim" .. id, nil, SimItemQuality[id] or 1, 40, nil, nil, nil, nil, nil, tostring(id)
 end
 
 -- Enum.AuctionHouseSortOrder: the live client exposes Name and Price keys
