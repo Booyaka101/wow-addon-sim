@@ -356,10 +356,15 @@ tostring = function(v)
     return r
 end
 
--- tonumber launders: the amount path has done arithmetic on tonumber(secret)
--- without error in every live version since 0.3.0.
+-- tonumber launders only secret STRINGS (conversion builds a clean value); a
+-- secret NUMBER rides through unchanged (live-proven: consolidate's sum came
+-- back secret and arithmetic killed the addon)
 tonumber = function(v)
-    if SimSecret.is(v) then v = v.__value end
+    if SimSecret.is(v) then
+        local inner = v.__value
+        if rawtype(inner) ~= "string" then return v end
+        v = inner
+    end
     return rawtonumber(v)
 end
 
