@@ -566,7 +566,19 @@ function sim_run_ah_scan()
         { itemID = 3827, count = 10, buyout = 2000000 },
     }
     -- pass 1: another addon already delivered the replicate list (the
-    -- Auctionator race) - the addon must harvest without its own request
+    -- Auctionator race) - the addon must harvest without its own request.
+    -- A watch rule is set first so the scan also drives the search path
+    -- (rebuildWatch -> searchListing -> SendSearchQuery, sorts validated).
+    if SlashCmdList and SlashCmdList["FOREVERSNIPER"] then
+        SlashCmdList["FOREVERSNIPER"]("watch Sim4338 50s")
+    end
+    SimAH.itemRows = {
+        { auctionID = 9001, buyoutAmount = 45000, quantity = 1, itemKey = { itemID = 4338 } },
+        { auctionID = 9002, buyoutAmount = 520000, quantity = 5, itemKey = { itemID = 1529 } },
+    }
+    SimAH.commodityRows = {
+        { unitPrice = 39000, quantity = 40 },
+    }
     SimAH.populate(SimAH.seed)
     sim_fire_event("AUCTION_HOUSE_SHOW")
     for i = 1, 80 do sim_tick_onupdate(10) end
@@ -612,6 +624,15 @@ function sim_run_browse_sweep()
     -- someone lists 4338 at a fifth of market
     SimAH.browseRows[2].minPrice = 5000
     for i = 1, 40 do sim_tick_onupdate(10) end -- next sweep must catch it
+    -- click the alerted popup row: exercises searchListing -> SendSearchQuery
+    -- (sorts validation) and the keyed result readers via printPending
+    for _, fr in ipairs(SIM_FRAMES) do
+        if fr.itemID ~= nil and fr._scripts and fr._scripts.OnClick then
+            sim_pcall(fr._scripts.OnClick, fr)
+            break
+        end
+    end
+    for i = 1, 10 do sim_tick_onupdate(10) end -- let the search results land
     sim_fire_event("AUCTION_HOUSE_CLOSED")
     local deals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.deals) or 0
     if deals == 0 then
@@ -619,3 +640,80 @@ function sim_run_browse_sweep()
     end
     print("  [browse] sweep done: " .. deals .. " deal(s) fired")
 end
+
+-- search-contract enforcement: this client validates sorts entries by field
+-- name (sortOrder, reverseSort - NOT reverse) and keys every result reader
+-- (GetNumItemSearchResults(itemKey), GetItemSearchResultInfo(itemKey, index),
+-- GetCommoditySearchResultInfo(itemID, index)). Live-proven via Auctionator
+-- usage strings and the "Current Field: [reverseSort]" error.
+SimAH.itemRows = {}
+SimAH.commodityRows = {}
+
+local function validSorts(sorts)
+    if sorts == nil then return true end
+    if type(sorts) ~= "table" then return false, "sorts must be a table" end
+    for i, s in ipairs(sorts) do
+        if type(s) ~= "table" then return false, "sorts[" .. i .. "] must be a table" end
+        if type(s.sortOrder) ~= "number" then
+            return false, "sorts[" .. i .. "].sortOrder must be a number (Enum.AuctionHouseSortOrder)"
+        end
+        for k in pairs(s) do
+            if k ~= "sortOrder" and k ~= "reverseSort" then
+                return false, "sorts[" .. i .. "] has unknown field '" .. k ..
+                    "' (this client validates by name: sortOrder, reverseSort)"
+            end
+        end
+    end
+    return true
+end
+
+C_AuctionHouse.MakeItemKey = function(id) return { itemID = id } end
+C_AuctionHouse.SendSearchQuery = function(key, sorts, separate)
+    local ok, msg = validSorts(sorts)
+    if not ok then SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: SendSearchQuery: " .. msg end
+    SimAH.searchKey = key
+    C_Timer.After(0.1, function() sim_fire_event("ITEM_SEARCH_RESULTS_UPDATED") end)
+    return true
+end
+local rawBrowseQuery = C_AuctionHouse.SendBrowseQuery
+C_AuctionHouse.SendBrowseQuery = function(q)
+    local ok, msg = validSorts(q and q.sorts)
+    if not ok then SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: SendBrowseQuery: " .. msg end
+    return rawBrowseQuery(q)
+end
+C_AuctionHouse.GetNumItemSearchResults = function(key)
+    if type(key) ~= "table" then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: GetNumItemSearchResults(itemKey) - this client requires the key"
+        return 0
+    end
+    return #SimAH.itemRows
+end
+C_AuctionHouse.GetItemSearchResultInfo = function(key, i)
+    if type(key) ~= "table" then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: GetItemSearchResultInfo(itemKey, index) - this client requires the key"
+        return nil
+    end
+    return SimAH.itemRows[i or 1]
+end
+C_AuctionHouse.GetCommoditySearchResultInfo = function(itemID, i)
+    if type(itemID) ~= "number" then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: GetCommoditySearchResultInfo(itemID, index) - this client requires the item id"
+        return nil
+    end
+    return SimAH.commodityRows[i or 1]
+end
+
+-- GetItemInfo: name resolution for watch-by-name rules (sim items are named
+-- "Sim <itemID>" so scenarios can watch them by name)
+GetItemInfo = function(idOrLink)
+    local id = type(idOrLink) == "number" and idOrLink or tonumber(tostring(idOrLink):match("item:(%d+)") or "") 
+    if id == nil then return nil end
+    return "Sim" .. id, nil, 1, 40, nil, nil, nil, nil, nil, tostring(id)
+end
+
+-- Enum.AuctionHouseSortOrder: the live client exposes Name and Price keys
+-- (Auctionator references both); values are validated as numbers only
+Enum = Enum or {}
+Enum.AuctionHouseSortOrder = Enum.AuctionHouseSortOrder or {
+    Bid = 0, Buyout = 1, Price = 1, Name = 2, Quantity = 3, TimeLeft = 4,
+}

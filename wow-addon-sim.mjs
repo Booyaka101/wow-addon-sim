@@ -320,7 +320,8 @@ strupper = string.upper
 strsplit = function(sep, str)
     local parts = {}
     for w in str:gmatch("[^" .. sep .. "]+") do parts[#parts + 1] = w end
-    return unpack(parts)
+    local up = unpack or table.unpack
+    return up(parts)
 end
 strjoin = function(sep, ...) return table.concat({...}, sep) end
 strmatch = string.match
