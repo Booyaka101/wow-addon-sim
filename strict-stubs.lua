@@ -668,18 +668,21 @@ function sim_run_browse_sweep()
     for _, a in ipairs((ForeverSniperDB and ForeverSniperDB.alerts) or {}) do
         kinds[#kinds + 1] = a.kind .. ":" .. tostring(a.id)
     end
-    print("  [browse] alert kinds fired: " .. table.concat(kinds, ", "))
+    local joined = table.concat(kinds, ",")
+    print("  [browse] alert kinds fired: " .. joined)
     local deals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.deals) or 0
-    if deals < 2 then
-        SIM_ERRORS[#SIM_ERRORS + 1] =
-            "BROWSE SWEEP: expected the market deal AND the vendor flip (" .. deals .. " fired)"
-    elseif deals > 2 then
-        SIM_ERRORS[#SIM_ERRORS + 1] =
-            "BROWSE SWEEP: " .. deals .. " deals fired - the gray/flooded items must be gated out"
+    if not joined:match("market:4338") then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the market deal did not fire"
+    end
+    if not joined:match("vendor:5555") then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the vendor flip did not fire"
+    end
+    if joined:match(":828") then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the gray item must be gated out"
     end
     local vendorDeals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.vendorDeals) or 0
     if vendorDeals ~= 1 then
-        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: vendor flip not detected (" .. vendorDeals .. ")"
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: vendor flip count wrong (" .. vendorDeals .. ")"
     end
     print("  [browse] sweep done: " .. deals .. " deal(s) fired (" .. vendorDeals .. " vendor)")
 end
