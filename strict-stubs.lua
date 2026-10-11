@@ -631,8 +631,12 @@ function sim_run_browse_sweep()
     local live = C_AuctionHouse.GetBrowseResults and C_AuctionHouse.GetBrowseResults() or nil
     print("  [browse] seeded " .. #SimAH.browseRows .. " rows; GetBrowseResults returns "
         .. (live and #live or "nil") .. " (same table: " .. tostring(live == SimAH.browseRows) .. ")")
+    SimAHFrame:Show()
     sim_fire_event("AUCTION_HOUSE_SHOW")
     for i = 1, 60 do sim_tick_onupdate(10) end -- ~10s: several sweeps, book arms
+    if SimAHFrame.BrowseResultsFrame:IsShown() then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the auto tab-switch did not leave the Browse page"
+    end
     -- someone lists 4338 at a fifth of market; a gray-quality item at a deal
     -- price; and a flooded market deal - only the first may alert
     SimAH.browseRows[2].minPrice = 5000 -- the deal drop (bisect suppressed once; restored)
@@ -857,4 +861,32 @@ end
 C_Item = C_Item or {}
 C_Item.RequestLoadItemDataByID = function(id)
   if id and SimUncached[id] then SimUncached[id] = nil end
+end
+
+-- AuctionHouseFrame emulation: opens on the Browse page (tab 1) like the
+-- live client; clicking another tab switches the display mode away from it
+SimAHFrame = StrictCreateFrame("Frame", "AuctionHouseFrame", UIParent)
+AuctionHouseFrame = SimAHFrame -- the addon resolves the global by name
+SimAHFrame:SetPoint("CENTER")
+SimAHFrame.BrowseResultsFrame = StrictCreateFrame("Frame", nil, SimAHFrame)
+SimAHFrame.BrowseResultsFrame:SetAllPoints()
+SimAHFrame.BrowseResultsFrame:Show()
+SimAHFrame.Tabs = {}
+local simTabNames = { "Browse", "Bids", "Auctions" }
+for i, name in ipairs(simTabNames) do
+  local t = StrictCreateFrame("Button", "SimAHTab" .. i, SimAHFrame)
+  t._text = name
+  t:IsShown() -- no-op
+  t._enabled = true
+  t.Click = function(self)
+    -- any non-first tab clears the browse display
+    if self._tabIndex ~= 1 then
+      SimAHFrame.BrowseResultsFrame:Hide()
+      SIM_LOG[#SIM_LOG + 1] = "[ah] tab switched: " .. tostring(self._text)
+    else
+      SimAHFrame.BrowseResultsFrame:Show()
+    end
+  end
+  t._tabIndex = i
+  SimAHFrame.Tabs[i] = t
 end
