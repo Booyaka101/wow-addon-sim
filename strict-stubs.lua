@@ -144,7 +144,7 @@ local function strict_create_frame(kind, name, parent, template)
         AUCTION_HOUSE_SHOW = true, AUCTION_HOUSE_CLOSED = true,
         REPLICATE_ITEM_LIST_UPDATE = true, REPLICATE_ITEM_LIST_UPDATED = true,
         COMMODITY_PRICE_UPDATED = true,
-        AUCTION_HOUSE_BROWSE_RESULTS_UPDATED = true, AUCTION_HOUSE_BROWSE_RESULTS_ADDED = true,
+        AUCTION_HOUSE_BROWSE_RESULTS_UPDATED = true, AUCTION_HOUSE_BROWSE_RESULTS_ADDED = true, OWNED_AUCTIONS_UPDATED = true,
     }
 
     f.RegisterEvent = function(self, event)
@@ -632,8 +632,13 @@ function sim_run_browse_sweep()
     print("  [browse] seeded " .. #SimAH.browseRows .. " rows; GetBrowseResults returns "
         .. (live and #live or "nil") .. " (same table: " .. tostring(live == SimAH.browseRows) .. ")")
     SimAHFrame:Show()
+    -- own an auction above the learned market: the undercut guard must fire
+    SimOwnedAuctions[1] = {
+        itemKey = { itemID = 4338 }, itemLink = nil,
+        buyoutAmount = 800000000, quantity = 20, -- 4000g/unit: above ANY plausible median
+    }
     sim_fire_event("AUCTION_HOUSE_SHOW")
-    for i = 1, 60 do sim_tick_onupdate(10) end -- ~10s: several sweeps, book arms
+    for i = 1, 210 do sim_tick_onupdate(10) end -- ~35s: sweeps arm AND the 30s undercut poll lands
     if SimAHFrame.BrowseResultsFrame:IsShown() then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the auto tab-switch did not leave the Browse page"
     end
@@ -661,7 +666,7 @@ function sim_run_browse_sweep()
         end
     end
     for i = 1, 10 do sim_tick_onupdate(10) end -- let the search results land
-    -- toggle the deal feed: rows must build, fill and hide without errors;
+-- toggle the deal feed: rows must build, fill and hide without errors;
     -- with a seeded bag, the SELL button must post at the learned market
     SimBags[0][1] = { id = 4338, count = 50 }
     SimBags[0][2] = { id = 5555, count = 30 }
@@ -682,6 +687,10 @@ function sim_run_browse_sweep()
         SlashCmdList["FOREVERSNIPER"]("options")
         for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("options")
+    end
+    local undercuts = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.undercuts) or 0
+    if undercuts == 0 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the undercut guard did not fire on the overpriced listing"
     end
     if #SimPosted == 0 then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the SELL button did not post the flip"
@@ -929,4 +938,15 @@ C_Item.GetItemMaxStackSizeByID = function(id)
   if id == nil then return nil end
   if SimUncached[id] then return nil end
   return SimMaxStack[id] or 20
+end
+
+-- owned auctions emulation: the undercut guard's data source
+SimOwnedAuctions = {}
+C_AuctionHouse.QueryOwnedAuctions = function()
+    C_Timer.After(0.1, function() sim_fire_event("OWNED_AUCTIONS_UPDATED") end)
+    return true
+end
+C_AuctionHouse.GetNumOwnedAuctions = function() return #SimOwnedAuctions end
+C_AuctionHouse.GetOwnedAuctionInfo = function(i)
+    return SimOwnedAuctions[i]
 end
