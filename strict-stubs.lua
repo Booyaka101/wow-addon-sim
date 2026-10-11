@@ -578,11 +578,11 @@ function sim_run_ah_scan()
     -- A watch rule is set first so the scan also drives the search path
     -- (rebuildWatch -> searchListing -> SendSearchQuery, sorts validated).
     if SlashCmdList and SlashCmdList["FOREVERSNIPER"] then
-        SlashCmdList["FOREVERSNIPER"]("watch Sim4338 50s")
+        SlashCmdList["FOREVERSNIPER"]("watch Sim4338 20g")
     end
     SimAH.itemRows = {
-        { auctionID = 9001, buyoutAmount = 45000, quantity = 1, itemKey = { itemID = 4338 } },
-        { auctionID = 9002, buyoutAmount = 520000, quantity = 5, itemKey = { itemID = 1529 } },
+        { auctionID = 9001, buyoutAmount = 2000000, quantity = 1, itemKey = { itemID = 4338 } },
+        { auctionID = 9002, buyoutAmount = 5200000, quantity = 5, itemKey = { itemID = 1529 } },
     }
     SimAH.commodityRows = {
         { unitPrice = 39000, quantity = 40 },
@@ -624,9 +624,9 @@ end
 function sim_run_browse_sweep()
     SimAH.browseRows = {
         { itemKey = { itemID = 1529 }, minPrice = 500000, totalQuantity = 12 },
-        { itemKey = { itemID = 4338 }, minPrice = 40000,  totalQuantity = 50 },
+        { itemKey = { itemID = 4338 }, minPrice = 5000000, totalQuantity = 50 },
         { itemKey = { itemID = 3827 }, minPrice = 200000, totalQuantity = 8  },
-        { itemKey = { itemID = 7777 }, minPrice = 40000,  totalQuantity = 10 }, -- uncached item
+        { itemKey = { itemID = 7777 }, minPrice = 5000000, totalQuantity = 10 }, -- uncached item
     }
     local live = C_AuctionHouse.GetBrowseResults and C_AuctionHouse.GetBrowseResults() or nil
     print("  [browse] seeded " .. #SimAH.browseRows .. " rows; GetBrowseResults returns "
@@ -639,8 +639,8 @@ function sim_run_browse_sweep()
     end
     -- someone lists 4338 at a fifth of market; a gray-quality item at a deal
     -- price; and a flooded market deal - only the first may alert
-    SimAH.browseRows[2].minPrice = 5000 -- the deal drop (bisect suppressed once; restored)
-    SimAH.browseRows[4].minPrice = 5000 -- the uncached item drops too: defers, then fires
+    SimAH.browseRows[2].minPrice = 1500000 -- the deal drop: 15g vs 50g market (70% off)
+    SimAH.browseRows[4].minPrice = 1500000 -- the uncached item drops too: defers, then fires
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 828 }, minPrice = 5000, totalQuantity = 5 }    -- gray: gated
     SimAH.browseRows[#SimAH.browseRows + 1] =
@@ -664,6 +664,9 @@ function sim_run_browse_sweep()
     -- toggle the deal feed: rows must build, fill and hide without errors;
     -- with a seeded bag, the SELL button must post at the learned market
     SimBags[0][1] = { id = 4338, count = 50 }
+    SimBags[0][2] = { id = 5555, count = 30 }
+    SimBags[0][3] = { id = 7777, count = 10 }
+    SimBags[0][4] = { id = 9999, count = 4 }
     if SlashCmdList and SlashCmdList["FOREVERSNIPER"] then
         SlashCmdList["FOREVERSNIPER"]("feed")
         for i = 1, 5 do sim_tick_onupdate(10) end
@@ -695,21 +698,24 @@ function sim_run_browse_sweep()
     local joined = table.concat(kinds, ",")
     print("  [browse] alert kinds fired: " .. joined)
     local deals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.deals) or 0
-    if not joined:match("market:4338") then
-        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the market deal did not fire"
+    if not (joined:match("market:4338") or joined:match("watch:4338")) then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: neither the market deal nor the watch hit fired for 4338"
     end
     if not joined:match("vendor:5555") then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the vendor flip did not fire"
     end
-    if joined:match(":9999") then
-        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the non-stackable deal fired - stackables-only mode broken"
+    if joined:match("market:9999") then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the non-stackable MARKET deal fired - stackables-only mode broken"
+    end
+    if not joined:match("vendor:9999") then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the non-stackable VENDOR flip did not fire - guaranteed profit must alert"
     end
     if joined:match(":828") then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the gray item must be gated out"
     end
     local vendorDeals = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.vendorDeals) or 0
-    if vendorDeals ~= 1 then
-        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: vendor flip count wrong (" .. vendorDeals .. ")"
+    if vendorDeals ~= 2 then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: vendor flip count wrong (" .. vendorDeals .. ", expected 2: stackable + non-stackable)"
     end
     print("  [browse] sweep done: " .. deals .. " deal(s) fired (" .. vendorDeals .. " vendor)")
 end
@@ -780,7 +786,7 @@ end
 -- "Sim<itemID>") and quality for the listability gate. SimItemQuality maps
 -- item ids to rarities; missing ids are uncommon (1).
 SimItemQuality = { [828] = 0 }
-SimItemVendor = { [5555] = 60000 }
+SimItemVendor = { [5555] = 60000, [9999] = 30000 }
 GetItemInfo = function(idOrLink)
     local id = type(idOrLink) == "number" and idOrLink or tonumber(tostring(idOrLink):match("item:(%d+)") or "")
     if id == nil then return nil end
