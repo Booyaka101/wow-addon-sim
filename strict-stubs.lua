@@ -686,6 +686,19 @@ function sim_run_browse_sweep()
         end
         for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("feed")
+        -- seed bags + a paid position BEFORE portfolio reads them
+        SimBags[0] = SimBags[0] or {}
+        SimBags[0][1] = SimBags[0][1] or { id = 4338, count = 50 }
+        local ba = ForeverSniperDB.boughtAt
+        if ba == nil then
+            -- cannot happen after the unifier, but be safe
+            ba = {}
+            ForeverSniperDB.boughtAt = ba
+        end
+        ba[4338] = { t = os.time() - 60, price = 3000000 }
+        SlashCmdList["FOREVERSNIPER"]("portfolio")
+        SlashCmdList["FOREVERSNIPER"]("relist")
+        for i = 1, 90 do sim_tick_onupdate(10) end -- paced: ~1s per holding
         SlashCmdList["FOREVERSNIPER"]("cancel")
         for i = 1, 10 do sim_tick_onupdate(10) end -- let the query + event land
         SlashCmdList["FOREVERSNIPER"]("why")
@@ -735,6 +748,13 @@ function sim_run_browse_sweep()
 
     -- the mailbox mint: the sold-auction mail must be counted as REALIZED.
     -- Runs last: the CLOSED event above triggers the scan synchronously.
+    local sawPortfolio = false
+    for _, l in ipairs(SIM_LOG) do
+        if tostring(l):find("holdings", 1, true) then sawPortfolio = true break end
+    end
+    if not sawPortfolio then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: /fsn portfolio printed nothing"
+    end
     local sales = (ForeverSniperDB and ForeverSniperDB.stats and ForeverSniperDB.stats.sales) or 0
     if sales == 0 then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the mailbox mint missed the sold-auction mail"

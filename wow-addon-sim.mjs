@@ -779,7 +779,7 @@ while (lua.lua_next(L, -2) !== 0) {
     lua.lua_pop(L, 1);
 }
 lua.lua_pop(L, 1);
-const logLines = logTexts.slice(-40); // the TAIL: late-scenario output matters most
+const logLines = logTexts.slice(-200); // wide window: scenario steps generate 100+ entries
 
 console.log(`\n  Log (${logTexts.length} entries, last ${logLines.length}):`);
 logLines.forEach(l => console.log(`    ${l}`));
