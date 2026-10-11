@@ -66,7 +66,7 @@ end
 
 -- traceback on error
 local function sim_pcall(fn, ...)
-    local ok, err = pcall(fn, ...)
+    local ok, err = xpcall(fn, debug.traceback, ...)
     if not ok then sim_err(err) end
     return ok
 end
@@ -149,38 +149,40 @@ CreateFrame = function(kind, name, parent, template)
         return t
     end
     f.CreateFontString = function(self, ...)
-        local fs = { _points = {}, _text = "", _shown = false,
-            SetText = function(s, t) s._text = t end,
-            GetText = function(s) return s._text end,
-            SetFont = function() end,
-            GetFont = function() return "SimFont.ttf", 16, "" end,
-            SetFontObject = function() end,
-            SetTextColor = function() end,
-            SetJustifyH = function() end,
-            SetJustifyV = function() end,
-            SetPoint = function(...) fs._points[#fs._points+1] = {...} end,
-            ClearAllPoints = function() fs._points = {} end,
-            GetPoint = function(s, i)
-                local p = s._points[i or #s._points]
-                if p then return p[1], f, p[3] or "CENTER", p[4] or 0, p[5] or 0 end
-                return nil
-            end,
-            SetSize = function() end,
-            SetWidth = function() end,
-            SetHeight = function() end,
-            Show = function(s) s._shown = true end,
-            Hide = function(s) s._shown = false end,
-            SetAlpha = function() end,
-            SetShadowColor = function() end,
-            SetShadowOffset = function() end,
-            SetSpacing = function() end,
-            SetAllPoints = function() end,
-            SetWordWrap = function() end,
-            SetMaxLines = function() end,
-            GetStringWidth = function() return 100 end,
-            GetStringHeight = function() return 20 end,
-            GetNumLines = function() return 1 end,
-        }
+        -- construct first, attach methods after: closures inside a local-table
+        -- initializer capture the GLOBAL fs (Lua scoping), which broke SetPoint
+        -- the first time a pooled font string ever reached it (secrets sweep, 2026-10)
+        local fs = { _points = {}, _text = "", _shown = false }
+        fs.SetText = function(s, t) s._text = t end
+        fs.GetText = function(s) return s._text end
+        fs.SetFont = function() end
+        fs.GetFont = function() return "SimFont.ttf", 16, "" end
+        fs.SetFontObject = function() end
+        fs.SetTextColor = function() end
+        fs.SetJustifyH = function() end
+        fs.SetJustifyV = function() end
+        fs.SetPoint = function(...) fs._points[#fs._points+1] = {...} end
+        fs.ClearAllPoints = function() fs._points = {} end
+        fs.GetPoint = function(s, i)
+            local p = s._points[i or #s._points]
+            if p then return p[1], f, p[3] or "CENTER", p[4] or 0, p[5] or 0 end
+            return nil
+        end
+        fs.SetSize = function() end
+        fs.SetWidth = function() end
+        fs.SetHeight = function() end
+        fs.Show = function(s) s._shown = true end
+        fs.Hide = function(s) s._shown = false end
+        fs.SetAlpha = function() end
+        fs.SetShadowColor = function() end
+        fs.SetShadowOffset = function() end
+        fs.SetSpacing = function() end
+        fs.SetAllPoints = function() end
+        fs.SetWordWrap = function() end
+        fs.SetMaxLines = function() end
+        fs.GetStringWidth = function() return 100 end
+        fs.GetStringHeight = function() return 20 end
+        fs.GetNumLines = function() return 1 end
         self._fonts[#self._fonts + 1] = fs
         return fs
     end
@@ -349,6 +351,9 @@ LEAVING_COMBAT = "Leaving combat"
 -- event dispatch helper (JS calls into this)
 function sim_fire_event(event, ...)
     local fired = 0
+    -- GetCurrentEventInfo() models "the current event's payload": the dispatch
+    -- context decides what it returns, exactly like the real client
+    SIM_LAST_EVENT_ARGS = { ... }
     -- call all SetScript handlers
     for frame in pairs(SIM_EVENT_SCRIPTS[event] or {}) do
         local fn = frame._scripts and frame._scripts["OnEvent"]
@@ -450,6 +455,7 @@ const SCENARIOS = {
     group: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'GROUP_ROSTER_UPDATE',
             'PARTY_MEMBERS_CHANGED', 'UNIT_HEALTH', 'UNIT_POWER_UPDATE'],
     logout: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'PLAYER_LEAVING_WORLD', 'PLAYER_LOGOUT'],
+    secrets: ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', 'COMBAT_TEXT_UPDATE'],
 };
 
 function getScenarioEvents(name) {
@@ -525,6 +531,16 @@ if (scenarios.length > 0) {
     events = ['ADDON_LOADED', 'PLAYER_LOGIN', 'PLAYER_ENTERING_WORLD', ...extraEvents];
 }
 for (const ev of events) {
+    // the secrets sweep replaces the bare event with a full marked-payload pass
+    if (scenarios.includes('secrets') && ev === 'COMBAT_TEXT_UPDATE') {
+        lua.lua_getglobal(L, fengari.to_luastring('sim_run_secret_sweep'));
+        const ss = lua.lua_pcall(L, 0, 0, 0);
+        if (ss !== lua.LUA_OK) {
+            console.error(`  DISPATCH ERROR (secrets sweep): ${safeJsString(L, -1) || 'unknown'}`);
+            hadErrors = true;
+        }
+        continue;
+    }
     lua.lua_getglobal(L, fengari.to_luastring(
         ev === 'ADDON_LOADED' ? 'sim_addon_loaded'
         : ev === 'PLAYER_LOGIN' ? 'sim_player_login'

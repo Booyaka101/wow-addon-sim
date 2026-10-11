@@ -130,6 +130,8 @@ local function strict_create_frame(kind, name, parent, template)
         PET_BATTLE_OPENING_START = true, PET_BATTLE_CLOSE = true,
         PLAYER_SPECIALIZATION_CHANGED = true, ACTIVE_TALENT_GROUP_CHANGED = true,
         INSPECT_READY = true, UNIT_INVENTORY_CHANGED = true,
+        ITEM_SEARCH_RESULTS_UPDATED = true, COMMODITY_SEARCH_RESULTS_UPDATED = true,
+        AUCTION_HOUSE_SHOW = true, AUCTION_HOUSE_CLOSED = true,
     }
 
     f.RegisterEvent = function(self, event)
@@ -223,7 +225,9 @@ local function strict_create_frame(kind, name, parent, template)
             if type(t) ~= "string" and type(t) ~= "number" then
                 SIM_ERRORS[#SIM_ERRORS + 1] = "STRICT: " .. self._name .. ":SetText(" .. type(t) .. ") — expected string or number"
             end
-            s._text = tostring(t or "")
+            -- SimSecret is defined later in this file; resolved at call time.
+            -- A marked value stores its display text: SetText is the display sink.
+            s._text = (SimSecret and SimSecret.display(t)) or tostring(t or "")
         end
         fs.GetText = function(s) return s._text end
         fs.SetFont = function() end
@@ -283,3 +287,154 @@ StrictGameTooltip.GetUnit = function(self) return "SimUnit", "target" end
 StrictGameTooltip.GetSpell = function(self) return nil end
 StrictGameTooltip.GetItem = function(self) return nil end
 StrictGameTooltip.SetOwner = function() end
+
+-- ---------------------------------------------------------------------------
+-- secret-value emulation (strict mode)
+-- Reproduces the live client's secret marker semantics, verified in game on
+-- Forever build 70338 across ClearCombatText 0.3.1-0.3.5:
+--   arithmetic on a secret        -> ERRORS here, exactly like live
+--   tostring(secret)              -> allowed, result KEEPS the marker
+--   tonumber(secret)              -> launders to a clean number
+--   secret .. x                   -> allowed (wiki-blessed), result keeps the marker
+--   secret == nil / ~= nil        -> allowed (documented nil-check)
+--   SetText(secret-marked string) -> allowed (display is a sanctioned sink)
+--   type(secret)                  -> reports the underlying type, like live
+-- Two live behaviors Lua 5.1 cannot intercept on tables and stay the linter's
+-- job (wow-secret-lint WSL004/WSL002 model them statically):
+--   #secret                       -> errors in game; raw length here
+--   secret OP value (compare)     -> errors in game; silent inequality here
+
+local rawtostring, rawtonumber, rawtype = tostring, tonumber, type
+
+SimSecret = {}
+
+local SECRET_META = {}
+SECRET_META.__index = nil
+function SECRET_META.__tostring(s) return s.__display end
+function SECRET_META.__concat(a, b)
+    local l = SimSecret.is(a) and a.__display or rawtostring(a)
+    local r = SimSecret.is(b) and b.__display or rawtostring(b)
+    return SimSecret.mark(l .. r)
+end
+local function secret_arith()
+    error("attempt to perform arithmetic on a secret value", 2)
+end
+SECRET_META.__add = secret_arith
+SECRET_META.__sub = secret_arith
+SECRET_META.__mul = secret_arith
+SECRET_META.__div = secret_arith
+SECRET_META.__mod = secret_arith
+SECRET_META.__pow = secret_arith
+SECRET_META.__unm = secret_arith
+
+function SimSecret.mark(value, display)
+    return setmetatable({ __value = value, __display = rawtostring(display or value) }, SECRET_META)
+end
+function SimSecret.is(v)
+    return rawtype(v) == "table" and getmetatable(v) == SECRET_META
+end
+
+function issecretvalue(v) return SimSecret.is(v) end
+
+-- tostring keeps the marker: the 0.3.4 crash was comparing tostring(secret)
+-- against "", which errors in game while the call itself is sanctioned.
+tostring = function(v)
+    local r = rawtostring(v)
+    if SimSecret.is(v) then return SimSecret.mark(r, r) end
+    return r
+end
+
+-- tonumber launders: the amount path has done arithmetic on tonumber(secret)
+-- without error in every live version since 0.3.0.
+tonumber = function(v)
+    if SimSecret.is(v) then v = v.__value end
+    return rawtonumber(v)
+end
+
+-- type spoofs like the live client: type(secretString) == "string" there.
+type = function(v)
+    if SimSecret.is(v) then return rawtype(v.__value) end
+    return rawtype(v)
+end
+
+-- display sink accounting: count SetText calls that carried a marked value, and
+-- store the display text like the live client renders it
+function SimSecret.display(v)
+    if SimSecret.is(v) then return v.__display end
+    return nil
+end
+SIM_SECRET_RENDERS = 0
+local function track_fontstring(fs)
+    local raw = fs.SetText
+    fs.SetText = function(s, text)
+        if SimSecret.is(text) then
+            SIM_SECRET_RENDERS = SIM_SECRET_RENDERS + 1
+            return raw(s, text.__display)
+        end
+        return raw(s, text)
+    end
+end
+local strict_cf_inner = StrictCreateFrame
+StrictCreateFrame = function(...)
+    local f = strict_cf_inner(...)
+    if f and f.CreateFontString then
+        local raw_cfs = f.CreateFontString
+        f.CreateFontString = function(self, ...)
+            local fs = raw_cfs(self, ...)
+            if fs then track_fontstring(fs) end
+            return fs
+        end
+    end
+    return f
+end
+-- UIParent comes from the permissive layer and never passes through the strict
+-- factory, so its font strings need the same wrapping
+if UIParent and UIParent.CreateFontString then
+    local raw_cfs = UIParent.CreateFontString
+    UIParent.CreateFontString = function(self, ...)
+        local fs = raw_cfs(self, ...)
+        if fs then track_fontstring(fs) end
+        return fs
+    end
+end
+
+-- C_CombatText with a rotating payload queue: the shapes seen in live play.
+-- Strict mode only: the permissive stub layer leaves C_CombatText nil, which
+-- is why the sim never exercised any of this before (see GAPS.md).
+local PAYLOADS = {
+    function() return SimSecret.mark(1234) end,                     -- number secret
+    function() return SimSecret.mark("Krol Blade") end,             -- string secret
+    function() return nil, SimSecret.mark(50), SimSecret.mark(75) end, -- absorb shape (a2/a3)
+    function() return "plain clean string" end,                     -- clean payload
+    function() return 42 end,                                       -- clean number
+    function() return nil end,                                      -- empty event
+}
+local payload_by_mtype = {}
+C_CombatText = {
+    GetCurrentEventInfo = function()
+        -- per-dispatch rotation: every event type cycles through every payload
+        -- shape, so repeats on the same type exercise consolidation arithmetic
+        local m = (SIM_LAST_EVENT_ARGS or {})[1]
+        local key = m ~= nil and tostring(m) or "?"
+        local ix = (payload_by_mtype[key] or 0) + 1
+        payload_by_mtype[key] = ix
+        return PAYLOADS[((ix - 1) % #PAYLOADS) + 1]()
+    end,
+    SetActiveUnit = function() return true end,
+}
+
+-- secrets sweep: fire COMBAT_TEXT_UPDATE across known types, unknown types and
+-- rounds, so every payload shape flows through the addon's handler — and the
+-- same payload repeats on the same type often enough to hit consolidation.
+function sim_run_secret_sweep()
+    local mtypes = {
+        "PERIODIC_HEAL", "DAMAGE", "ABSORB_DAMAGED", "SPELL_CAST", "MISS",
+        "SOME_NEW_UNKNOWNTYPE", "ANOTHER_UNKNOWN",
+    }
+    for round = 1, #PAYLOADS + 2 do
+        for _, mtype in ipairs(mtypes) do
+            sim_fire_event("COMBAT_TEXT_UPDATE", mtype)
+        end
+    end
+    print("  [secrets] sweep done: " .. SIM_SECRET_RENDERS .. " marked value(s) rendered through SetText")
+end
