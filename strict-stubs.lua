@@ -649,6 +649,8 @@ function sim_run_browse_sweep()
         { itemKey = { itemID = 5555 }, minPrice = 45000, totalQuantity = 30 }  -- under vendor: VENDOR deal
     SimAH.browseRows[#SimAH.browseRows + 1] =
         { itemKey = { itemID = 7777 }, minPrice = 5000, totalQuantity = 10 }  -- deal, uncached first (deferred)
+    SimAH.browseRows[#SimAH.browseRows + 1] =
+        { itemKey = { itemID = 9999 }, minPrice = 5000, totalQuantity = 4 }  -- deal BUT non-stackable: must stay silent
     for i = 1, 40 do sim_tick_onupdate(10) end -- next sweep must catch it
     -- click the alerted popup row: exercises searchListing -> SendSearchQuery
     -- (sorts validation) and the keyed result readers via printPending
@@ -673,6 +675,7 @@ function sim_run_browse_sweep()
         end
         for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("feed")
+        SlashCmdList["FOREVERSNIPER"]("why")
         SlashCmdList["FOREVERSNIPER"]("options")
         for i = 1, 3 do sim_tick_onupdate(10) end
         SlashCmdList["FOREVERSNIPER"]("options")
@@ -697,6 +700,9 @@ function sim_run_browse_sweep()
     end
     if not joined:match("vendor:5555") then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the vendor flip did not fire"
+    end
+    if joined:match(":9999") then
+        SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the non-stackable deal fired - stackables-only mode broken"
     end
     if joined:match(":828") then
         SIM_ERRORS[#SIM_ERRORS + 1] = "BROWSE SWEEP: the gray item must be gated out"
@@ -889,4 +895,32 @@ for i, name in ipairs(simTabNames) do
   end
   t._tabIndex = i
   SimAHFrame.Tabs[i] = t
+end
+
+-- C_Item by-ID oracles + the stackable model: max stack 20 by default,
+-- SimMaxStack overrides per item id (1 = non-stackable gear-like)
+SimMaxStack = { [1529] = 1, [9999] = 1 }
+local rawCItemGetItemInfo = GetItemInfo
+C_Item = C_Item or {}
+C_Item.GetItemNameByID = function(id)
+  local info = rawCItemGetItemInfo and nil
+  -- names come from the existing GetItemInfo stub; uncached stays nil
+  local ok, n = pcall(rawCItemGetItemInfo, id)
+  if ok and type(n) == "string" then return n end
+  return nil
+end
+C_Item.GetItemQualityByID = function(id)
+  local ok, _, _, q = pcall(rawCItemGetItemInfo, id)
+  if ok and type(q) == "number" then return q end
+  return nil
+end
+C_Item.GetItemIconByID = function(id)
+  local ok, _, _, _, _, _, _, _, _, ic = pcall(rawCItemGetItemInfo, id)
+  if ok and type(ic) == "string" then return ic end
+  return nil
+end
+C_Item.GetItemMaxStackSizeByID = function(id)
+  if id == nil then return nil end
+  if SimUncached[id] then return nil end
+  return SimMaxStack[id] or 20
 end
